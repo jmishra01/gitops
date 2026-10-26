@@ -38,6 +38,7 @@ class Commit:
     timestamp: int
     subject: str
     parents: tuple[str, ...] = ()
+    refs: tuple[str, ...] = ()  # e.g. ("HEAD -> main", "origin/main", "tag: v1.0")
 
     @property
     def date(self) -> datetime:
