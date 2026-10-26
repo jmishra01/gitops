@@ -1,0 +1,23 @@
+[project]
+name = "gitops"
+version = "0.1.0"
+description = "Desktop git repository manager built with PySide6"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-qt>=4"]
+
+[project.gui-scripts]
+gitops = "gitops.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gitops*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
