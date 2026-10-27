@@ -97,7 +97,9 @@ class TaskRunner(QObject):
 
     def _finished(self, task: Task) -> None:
         self._active.discard(task)
-        task.signals.deleteLater()
+        # Hand the signals object back to Python so it's freed with its Task, exactly once.
+        # (deleteLater here could fire after the runner itself had deleted it: a double delete.)
+        task.signals.setParent(None)
 
     def cancel_all(self) -> None:
         for task in list(self._active):

@@ -1,5 +1,6 @@
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -363,13 +364,12 @@ def test_dashboard_lists_repos_with_state(window, repo, tmp_path, qtbot):
     window._open_dashboard()
     dash = window.dashboard
     dash.set_repos([str(repo.path), str(other), str(tmp_path / "missing")])
-    qtbot.waitUntil(lambda: dash.model.rowCount() == 3 and "repositories" in dash.status.text(), timeout=5000)
-    states = {dash.model.item(r, 0).text(): dash.model.item(r, 6).text() for r in range(3)}
-    assert states == {"missing": "Unavailable", "other": "clean", "repo": "uncommitted changes"}
+    qtbot.waitUntil(lambda: len(dash.cards) == 3 and dash.task is not None and "checking" not in dash.subtitle.text(), timeout=5000)
+    chips = {Path(p).name: card.state.chip for p, card in dash.cards.items()}
+    assert chips == {"missing": "Unavailable", "other": "Detached", "repo": "1 change"}
 
-    dash.table.selectRow([dash.model.item(r, 0).text() for r in range(3)].index("other"))
-    dash._open_selected()
-    assert window.backend.root.name == "other"
+    dash.cards[str(other)].open_btn.click()
+    assert window.backend.root.name == "other" and window.current_page() is window.changes
     dash.close()
 
 

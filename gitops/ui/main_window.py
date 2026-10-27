@@ -939,13 +939,15 @@ class MainWindow(QMainWindow):
     def _open_dashboard(self) -> None:
         if self.dashboard is None:
             self.dashboard = DashboardWindow(self.runner, self)
-            self.dashboard.open_repo.connect(self._open_from_dashboard)
+            self.dashboard.open_repo_page.connect(self._open_from_dashboard)
         self.dashboard.show()
         self.dashboard.raise_()
         self.dashboard.refresh()
 
-    def _open_from_dashboard(self, path: str) -> None:
-        self.open_repo(path)
+    def _open_from_dashboard(self, path: str, page: str = "changes") -> None:
+        if not self.backend or Path(path).resolve() != self.backend.root.resolve():
+            self.open_repo(path)
+        self.show_page(self.history if page == "history" else self.changes)
         self.raise_()
         self.activateWindow()
 
