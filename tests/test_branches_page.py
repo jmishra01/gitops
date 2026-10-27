@@ -7,8 +7,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QSettings  # noqa: E402
 
 from gitops.core.models import Branch, Stash, Tag  # noqa: E402
-from gitops.ui.widgets.branches_view import actions_for, build_sections, tracking_chip  # noqa: E402
 from gitops.ui.main_window import MainWindow  # noqa: E402
+from gitops.ui.widgets.branches_view import actions_for, build_sections, tracking_chip  # noqa: E402
 from gitops.ui.widgets.stashes_view import split_message, stash_row  # noqa: E402
 
 

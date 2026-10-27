@@ -8,7 +8,6 @@ import pytest
 from gitops.core import GitBackend
 from gitops.core.git_backend import _english_env, _messages_need_english
 
-
 # ---------------------------------------------------------------- locale
 
 

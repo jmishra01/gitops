@@ -21,8 +21,8 @@ from gitops.core.content_search import SearchOptions, grep_at, iter_search, summ
 from gitops.core.git_backend import GitBackend
 from gitops.core.models import SearchHit
 from gitops.services.task_runner import Task, TaskRunner
-from gitops.ui.widgets.common import item, kind_item, make_table, relative_time
 from gitops.ui.theme import colors
+from gitops.ui.widgets.common import item, kind_item, make_table, relative_time
 from gitops.ui.widgets.diff_view import DiffView
 from gitops.ui.widgets.history_view import paint_row_background
 

@@ -20,10 +20,10 @@ from PySide6.QtWidgets import (
 from gitops.core.git_backend import GitBackend
 from gitops.core.graph_layout import GraphRow, layout
 from gitops.core.models import Commit
-from gitops.ui.theme import colors
-from gitops.ui.widgets.common import item, make_table, paint_avatar, relative_time
 from gitops.services.task_runner import TaskRunner
+from gitops.ui.theme import colors
 from gitops.ui.widgets.commit_details import CommitDetails
+from gitops.ui.widgets.common import item, make_table, paint_avatar, relative_time
 
 LANE_COLORS = [QColor(c) for c in ("#0969da", "#1a7f37", "#bf3989", "#9a6700", "#8250df", "#cf222e", "#1b7c83")]
 LANE_WIDTH = 14

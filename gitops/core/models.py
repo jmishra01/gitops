@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 
@@ -42,7 +42,7 @@ class Commit:
 
     @property
     def date(self) -> datetime:
-        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+        return datetime.fromtimestamp(self.timestamp, tz=UTC).astimezone()
 
     @property
     def is_merge(self) -> bool:
@@ -65,7 +65,7 @@ class Branch:
 
     @property
     def date(self) -> datetime:
-        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+        return datetime.fromtimestamp(self.timestamp, tz=UTC).astimezone()
 
 
 @dataclass(frozen=True)
@@ -100,7 +100,7 @@ class Stash:
 
     @property
     def date(self) -> datetime:
-        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+        return datetime.fromtimestamp(self.timestamp, tz=UTC).astimezone()
 
 
 @dataclass(frozen=True)
@@ -152,7 +152,7 @@ class BlameLine:
 
     @property
     def date(self) -> datetime:
-        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+        return datetime.fromtimestamp(self.timestamp, tz=UTC).astimezone()
 
     @property
     def uncommitted(self) -> bool:
@@ -168,7 +168,7 @@ class ReflogEntry:
 
     @property
     def date(self) -> datetime:
-        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+        return datetime.fromtimestamp(self.timestamp, tz=UTC).astimezone()
 
 
 @dataclass(frozen=True)

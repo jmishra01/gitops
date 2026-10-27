@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -22,8 +23,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-import shiboken6
 
 from gitops.core.git_backend import GitBackend
 from gitops.core.models import RepoSummary
@@ -636,7 +635,7 @@ class DashboardWindow(QWidget):
         self.fetch_task = None
         self.fetch_btn.setText("Fetch all")
         if not cancelled:
-            self.settings.setValue(self.FETCHED_KEY, datetime.now(timezone.utc).isoformat())
+            self.settings.setValue(self.FETCHED_KEY, datetime.now(UTC).isoformat())
         self.refresh()
 
     def apply_theme(self) -> None:

@@ -6,7 +6,7 @@ Opened from any file (Changes, History, Search) or with the file picker in its h
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from PySide6.QtCore import QModelIndex, QRect, QSize, QStringListModel, Qt, Signal
@@ -85,7 +85,7 @@ def build_versions(backend: GitBackend, path: str, entries: list[FileHistoryEntr
         subject = "Same as the last commit"
     else:
         subject = "Uncommitted changes"
-    versions = [Version(None, path, subject, "Working copy", "You", datetime.now(timezone.utc).astimezone(), "")]
+    versions = [Version(None, path, subject, "Working copy", "You", datetime.now(UTC).astimezone(), "")]
     for e in entries:
         if e.added is None:
             delta = "binary"

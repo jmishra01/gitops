@@ -8,13 +8,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDockWidget,
     QFileDialog,
+    QHBoxLayout,
     QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
     QMessageBox,
     QPushButton,
-    QHBoxLayout,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -23,21 +23,21 @@ from PySide6.QtWidgets import (
 
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import Commit, Stash, Submodule, Tag, Worktree
-from gitops.services.task_runner import Task, TaskRunner
 from gitops.core.rebase import has_merges, rebase_plan, run_interactive_rebase
+from gitops.services.task_runner import Task, TaskRunner
 from gitops.ui import theme
-from gitops.ui.dialogs.clone_dialog import CloneDialog
 from gitops.ui.dashboard import DashboardWindow
+from gitops.ui.dialogs.clone_dialog import CloneDialog
 from gitops.ui.dialogs.command_palette import CommandPalette
 from gitops.ui.dialogs.gitignore_dialog import GitignoreDialog
-from gitops.ui.dialogs.undo_dialog import UndoDialog
-from gitops.ui.widgets.git_console import GitConsole
 from gitops.ui.dialogs.rebase_dialog import RebaseDialog
 from gitops.ui.dialogs.stash_dialogs import StashSaveDialog
+from gitops.ui.dialogs.undo_dialog import UndoDialog
 from gitops.ui.widgets.branches_view import BranchesView
 from gitops.ui.widgets.changes_view import ChangesView
 from gitops.ui.widgets.content_search_view import ContentSearchView
 from gitops.ui.widgets.file_inspector import FileInspector
+from gitops.ui.widgets.git_console import GitConsole
 from gitops.ui.widgets.history_view import HistoryView
 from gitops.ui.widgets.nav_rail import NavRail
 from gitops.ui.widgets.row_list import Row

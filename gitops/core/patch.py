@@ -125,11 +125,12 @@ def build_partial_patch(patch: FilePatch, selected: Iterable[int], reverse: bool
         body: list[str] = []
         old_count = new_count = 0
 
+        # Only called within this iteration, so it always sees the current `body`.
         def emit(tag: str, line: _Line) -> None:
             nonlocal old_count, new_count
-            body.append(tag + line.text)
+            body.append(tag + line.text)  # noqa: B023
             if line.no_eol:
-                body.append("\\ No newline at end of file")
+                body.append("\\ No newline at end of file")  # noqa: B023
             if tag != "+":
                 old_count += 1
             if tag != "-":
