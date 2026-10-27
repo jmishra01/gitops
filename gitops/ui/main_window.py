@@ -62,8 +62,9 @@ class MainWindow(QMainWindow):
         self.backend: GitBackend | None = None
         self.network_task: Task | None = None
 
-        self.sidebar = QTreeWidget()
+        self.sidebar = QTreeWidget(objectName="Sidebar")
         self.sidebar.setHeaderHidden(True)
+        self.sidebar.setIndentation(14)
         self.sidebar.setMinimumWidth(200)
         self.sidebar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.sidebar.customContextMenuRequested.connect(self._branch_menu)
@@ -71,11 +72,14 @@ class MainWindow(QMainWindow):
 
         self.changes = ChangesView()
         self.changes.changed.connect(self.refresh)
-        self.history = HistoryView()
+        self.history = HistoryView(self.runner)
         self.history.reload_requested.connect(self.refresh)
         self.history.load_more.connect(self._load_more_history)
         self.history.filter_requested.connect(self._apply_history_filter)
         self.history.commit_menu_requested.connect(self._commit_menu)
+        self.history.details.action_requested.connect(self._commit_action)
+        self.history.details.open_file_history.connect(self._open_file_history)
+        self.history.details.open_blame.connect(self._open_blame)
         self.blame = BlameView(self.runner)
         self.blame.show_commit.connect(self._show_in_history)
         self.file_history = FileHistoryView(self.runner)
@@ -1040,3 +1044,32 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction(self.branch_act)
         menu.addAction("All branches…", lambda: self.show_page(self.history))
+
+    # ------------------------------------------------------------------ commit details actions
+
+    def _commit_action(self, action: str, commit: Commit) -> None:
+        if action == "checkout":
+            self._checkout_commit(commit)
+        elif action == "cherry_pick":
+            self._stoppable_op(f"Cherry-picked {commit.short_sha}", lambda b: b.cherry_pick(commit.sha))
+        elif action == "revert":
+            self._revert(commit)
+        elif action == "new_branch":
+            self._new_branch(commit.sha)
+        elif action == "new_tag":
+            self._create_tag(commit.sha)
+        elif action.startswith("reset_"):
+            self._reset(commit, action.removeprefix("reset_"))
+        elif action == "rebase_from":
+            self._interactive_rebase(commit.sha, commit.short_sha)
+
+    def _checkout_commit(self, commit: Commit) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Check out commit",
+            f"Look at {commit.short_sha} without moving any branch?\n\n"
+            "You'll be on a detached HEAD: new commits won't belong to a branch until you create one. "
+            "Switch back with the branch menu in the top bar.",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._git(lambda b: b.checkout_detached(commit.sha), f"Checked out {commit.short_sha} (detached)")

@@ -143,6 +143,8 @@ class TopBar(QFrame):
     def set_sync(self, state: SyncState, busy: str | None = None) -> None:
         self.sync_state = state
         self.sync_button.setText(busy or state.label)
+        # Room for the icon, the label and the dropdown section, whatever the label says.
+        self.sync_button.setMinimumWidth(self.sync_button.fontMetrics().horizontalAdvance(busy or state.label) + 72)
         self.sync_button.setToolTip(state.tooltip)
         # Only a real next step gets the filled primary look; "No remote" and "Up to date" stay quiet.
         quiet = state.action == "none" or (state.action == "fetch" and state.label == "Up to date")

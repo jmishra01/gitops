@@ -169,7 +169,7 @@ class HunkLines(QWidget):
 
 
 class HunkCard(QFrame):
-    def __init__(self, view: HunkDiffView, hunk_no: int, hunk: Hunk, action_label: str):
+    def __init__(self, view: HunkDiffView, hunk_no: int, hunk: Hunk, action_label: str | None):
         super().__init__(objectName="HunkCard")
         self.lines = HunkLines(view, hunk_lines(hunk))
         header = QWidget(objectName="HunkHeader")
@@ -180,8 +180,9 @@ class HunkCard(QFrame):
         title.setFont(mono_font(self.font()))
         context = QLabel(hunk.section.strip(), objectName="Muted")
         context.setFont(mono_font(self.font()))
-        self.action = QPushButton(action_label)
+        self.action = QPushButton(action_label or "")
         self.action.setProperty("variant", "secondary")
+        self.action.setVisible(action_label is not None)  # read-only diffs (history) have no hunk actions
         self.action.clicked.connect(lambda: view.hunk_action.emit(hunk_no))
         row = QHBoxLayout(header)
         row.setContentsMargins(14, 6, 8, 6)
@@ -216,7 +217,7 @@ class HunkDiffView(QScrollArea):
         self.anchor: int | None = None
         self.cards: list[HunkCard] = []
 
-    def show_patch(self, patch: FilePatch, action_label: str, selectable: bool = True) -> None:
+    def show_patch(self, patch: FilePatch, action_label: str | None, selectable: bool = True) -> None:
         self.patch = patch
         self.selectable = selectable
         self.selected = set()

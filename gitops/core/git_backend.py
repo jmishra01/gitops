@@ -21,6 +21,7 @@ from gitops.core.models import (
     BlameLine,
     Branch,
     Commit,
+    CommitFile,
     FileStatus,
     ReflogEntry,
     RepoSummary,
@@ -353,6 +354,60 @@ class GitBackend:
         return self.run(
             "show", "-M", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", sha, "--", *paths
         )
+
+    def _commit_base(self, commit: Commit) -> str:
+        """What a commit is compared with: its first parent (so merges show what they brought in), or nothing."""
+        return commit.parents[0] if commit.parents else EMPTY_TREE
+
+    def commit_files(self, commit: Commit) -> list[CommitFile]:
+        """Files the commit changed, with line counts, in path order."""
+        base = self._commit_base(commit)
+        status_out = self.run("diff", "--name-status", "-z", "-M", "--no-ext-diff", base, commit.sha)
+        parts = status_out.split("\0")
+        files: list[CommitFile] = []
+        i = 0
+        while i < len(parts) and parts[i]:
+            code = parts[i]
+            if code[:1] in "RC":
+                old, new = parts[i + 1], parts[i + 2]
+                files.append(CommitFile(code[:1], new, old))
+                i += 3
+            else:
+                files.append(CommitFile(code[:1], parts[i + 1]))
+                i += 2
+        counts: dict[str, tuple[int | None, int | None]] = {}
+        num_out = self.run("diff", "--numstat", "-z", "-M", "--no-ext-diff", "--no-textconv", base, commit.sha)
+        records = num_out.split("\0")
+        j = 0
+        while j < len(records) and records[j]:
+            added, removed, path = records[j].split("\t", 2)
+            if path == "":  # rename: the old and new paths follow as separate records
+                path = records[j + 2]
+                j += 3
+            else:
+                j += 1
+            counts[path] = (int(added) if added != "-" else None, int(removed) if removed != "-" else None)
+        return [
+            CommitFile(f.status, f.path, f.old_path, *counts.get(f.path, (None, None)))
+            for f in sorted(files, key=lambda f: f.path)
+        ]
+
+    def commit_file_diff(self, commit: Commit, file: CommitFile) -> str:
+        """Patch of one file within a commit (lossless text, like file_diff)."""
+        paths = [p for p in (file.old_path, file.path) if p]
+        return decode_lossless(
+            self.run_bytes(
+                "diff", "-M", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/",
+                self._commit_base(commit), commit.sha, "--", *paths,
+            )
+        )
+
+    def commit_message(self, sha: str) -> str:
+        return self.run("log", "-1", "--format=%B", sha).strip()
+
+    def checkout_detached(self, sha: str) -> None:
+        """Look at an old commit without moving any branch (detached HEAD)."""
+        self.run("switch", "-q", "--detach", sha)
 
     def show_file(self, sha: str, path: str) -> bytes:
         """Return the file's content as it was at `sha`."""

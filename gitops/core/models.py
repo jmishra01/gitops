@@ -191,3 +191,14 @@ class RepoSummary:
     last_commit: Commit | None
     operation: str | None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class CommitFile:
+    """One file changed by a commit (relative to its first parent)."""
+
+    status: str  # A, M, D, R, C, T
+    path: str
+    old_path: str | None = None  # for renames and copies
+    added: int | None = None  # None for binary files
+    removed: int | None = None

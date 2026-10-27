@@ -37,7 +37,7 @@ def test_history_graph_and_sidebar(window, qtbot):
     assert "HEAD -> main" in window.history.model.item(0, 1).data(0x0100)
     assert window.history.model.item(0, 0).data(0x0100).column == 0
     assert "main" in window.sidebar.topLevelItem(0).child(0).text(0)
-    qtbot.waitUntil(lambda: "+def oauth" in window.history.diff.toPlainText(), timeout=5000)
+    qtbot.waitUntil(lambda: "+def oauth(user):" in window.history.details.diff_text(), timeout=5000)
 
 
 def test_file_history_view(window, qtbot):
@@ -329,13 +329,13 @@ def test_theme_switch_recolors_views(window, qtbot):
     try:
         window._set_theme("dark")
         assert theme.is_dark()
-        assert window.history.diff.highlighter.added.background().color().name() == theme.DARK.add_bg
+        assert window.history.details.text.highlighter.added.background().color().name() == theme.DARK.add_bg
         from PySide6.QtGui import QPalette
         from PySide6.QtWidgets import QApplication
 
         assert QApplication.palette().color(QPalette.ColorRole.Base).name() == "#0d1117"
         window._set_theme("light")
-        assert window.history.diff.highlighter.added.background().color().name() == theme.LIGHT.add_bg
+        assert window.history.details.text.highlighter.added.background().color().name() == theme.LIGHT.add_bg
     finally:
         theme.apply("light")
 

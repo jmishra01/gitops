@@ -47,3 +47,53 @@ def test_log_and_show_file(repo):
     assert log[0].author == "Bob"
     assert log[0].parents == (first,)
     assert backend.show_file(first, "a.txt") == b"v1\n"
+
+
+def test_commit_files_and_diff(repo):
+    repo.write("keep.txt", "a\nb\n")
+    repo.write("old.txt", "x\n" * 20)
+    repo.commit("base")
+    repo.write("keep.txt", "a\nB\nc\n")
+    repo.git("mv", "old.txt", "renamed.txt")
+    repo.write("new.bin", "\0\1\2")
+    repo.write("gone.txt", "")
+    repo.commit("changes")
+    backend = GitBackend(repo.path)
+    head = backend.log()[0]
+
+    files = {f.path: f for f in backend.commit_files(head)}
+    assert (files["keep.txt"].status, files["keep.txt"].added, files["keep.txt"].removed) == ("M", 2, 1)
+    assert files["renamed.txt"].status == "R" and files["renamed.txt"].old_path == "old.txt"
+    assert files["new.bin"].status == "A" and files["new.bin"].added is None  # binary
+    assert "+B" in backend.commit_file_diff(head, files["keep.txt"])
+
+
+def test_root_and_merge_commits_compare_with_first_parent(repo):
+    repo.write("a.txt", "a\n")
+    repo.commit("root")
+    backend = GitBackend(repo.path)
+    root = backend.log()[0]
+    assert [f.path for f in backend.commit_files(root)] == ["a.txt"]
+
+    repo.git("switch", "-q", "-c", "side")
+    repo.write("side.txt", "s\n")
+    repo.commit("side work")
+    repo.git("switch", "-q", "main")
+    repo.write("main.txt", "m\n")
+    repo.commit("main work")
+    repo.git("merge", "-q", "--no-edit", "side")
+    merge = backend.log()[0]
+    assert merge.is_merge
+    assert [f.path for f in backend.commit_files(merge)] == ["side.txt"]  # what the merge brought in
+
+
+def test_commit_message_and_detached_checkout(repo):
+    repo.write("a.txt", "a\n")
+    first = repo.commit("Subject line\n\nBody text here.")
+    repo.write("a.txt", "b\n")
+    repo.commit("second")
+    backend = GitBackend(repo.path)
+    assert backend.commit_message(first) == "Subject line\n\nBody text here."
+    backend.checkout_detached(first)
+    assert backend.current_branch() is None
+    assert backend.run("rev-parse", "HEAD").strip() == first

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QStandardItem, QStandardItemModel
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView
 
 from gitops.core.models import ChangeKind
@@ -64,3 +64,44 @@ def make_table(headers: list[str], stretch_column: int) -> tuple[QTableView, QSt
     header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
     header.setSectionResizeMode(stretch_column, QHeaderView.ResizeMode.Stretch)
     return view, model
+
+
+# Avatar colours: mid-tone, all with white text at 4.5:1 or better.
+AVATAR_COLORS = ("#6D4BD8", "#0F766E", "#B4540A", "#2F5BEA", "#B42318", "#7A5A00", "#1F7A3A", "#9C2E8A")
+
+
+def initials(name: str) -> str:
+    parts = [p for p in name.replace(".", " ").replace("_", " ").split() if p]
+    if not parts:
+        return "?"
+    return (parts[0][0] + (parts[-1][0] if len(parts) > 1 else "")).upper()
+
+
+def avatar_color(key: str) -> str:
+    # Stable across runs (unlike hash()), so a person keeps their colour.
+    return AVATAR_COLORS[sum(key.encode()) % len(AVATAR_COLORS)]
+
+
+def paint_avatar(painter: QPainter, x: int, y: int, size: int, name: str, key: str | None = None) -> None:
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(avatar_color(key or name)))
+    painter.drawEllipse(x, y, size, size)
+    font = QFont(painter.font())
+    font.setPixelSize(max(int(size * 0.42), 8))
+    font.setBold(True)
+    painter.setFont(font)
+    painter.setPen(QColor("#FFFFFF"))
+    painter.drawText(x, y, size, size, int(Qt.AlignmentFlag.AlignCenter), initials(name))
+    painter.restore()
+
+
+def avatar_pixmap(name: str, size: int = 22, key: str | None = None, ratio: float = 2.0) -> QPixmap:
+    pm = QPixmap(int(size * ratio), int(size * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pm)
+    paint_avatar(painter, 0, 0, size, name, key)
+    painter.end()
+    return pm

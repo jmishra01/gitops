@@ -295,6 +295,22 @@ def stylesheet(c: Colors) -> str:
     QToolButton[variant="sync"]:hover {{ background: {c.primary_hover}; }}
     QToolButton[variant="sync"]::menu-button {{ border-left: 1px solid rgba(255,255,255,0.35); width: 26px; }}
 
+    #Segmented {{ background: {c.field_bg}; border-radius: 8px; }}
+    QToolButton[variant="secondary"]::menu-indicator {{ image: none; width: 0px; }}
+    QTreeWidget#Sidebar {{
+        background: {c.surface}; border: none; border-right: 1px solid {c.border}; padding: 8px 4px; color: {c.text};
+    }}
+    QTreeWidget#Sidebar::item {{ min-height: 26px; border-radius: 6px; padding-left: 2px; }}
+    QTreeWidget#Sidebar::item:hover {{ background: {c.field_bg}; }}
+    QTreeWidget#Sidebar::item:selected {{ background: {c.accent_soft}; color: {c.accent_on_soft}; }}
+    QPushButton[variant="segment"] {{
+        background: transparent; color: {c.text_secondary}; border: none; border-radius: 6px;
+        padding: 0px 10px; min-height: 28px;
+    }}
+    QPushButton[variant="segment"]:checked {{
+        background: {c.surface}; color: {c.text}; font-weight: 600; border: 1px solid {c.border};
+    }}
+    QTableView#CommitTable {{ background: {c.surface}; border: none; }}
     QLineEdit#SearchField {{
         background: {c.field_bg}; border: 1px solid transparent; border-radius: 8px; padding: 0px 10px;
         min-height: 32px; color: {c.text};
