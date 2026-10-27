@@ -88,8 +88,8 @@ def parse_conflicts(text: str) -> list[ConflictBlock]:
                 ours=ours,
                 theirs=theirs,
                 base=base,
-                ours_label=lines[start][len(OURS_MARK):].strip(),
-                theirs_label=lines[j][len(THEIRS_MARK):].strip(),
+                ours_label=lines[start][len(OURS_MARK) :].strip(),
+                theirs_label=lines[j][len(THEIRS_MARK) :].strip(),
             )
         )
         i = j + 1
@@ -105,7 +105,7 @@ def resolve(text: str, choices: dict[int, Choice]) -> str:
     for n, block in enumerate(blocks):
         if n not in choices:
             continue
-        out.extend(lines[cursor:block.start])
+        out.extend(lines[cursor : block.start])
         out.extend(block.lines_for(choices[n]))
         cursor = block.end + 1
     out.extend(lines[cursor:])
@@ -121,6 +121,7 @@ def has_conflict_markers(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------- segment model for the resolver
+
 
 @dataclass
 class Segment:

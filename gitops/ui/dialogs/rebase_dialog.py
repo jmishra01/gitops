@@ -93,7 +93,9 @@ class RebaseDialog(QDialog):
         layout.addWidget(self.error)
         layout.addWidget(box)
         dialog_heading(
-            self, layout, "Edit history",
+            self,
+            layout,
+            "Edit history",
             f"Commits after <b>{base_label}</b>, oldest first. Drag to reorder, then choose what happens to each one. "
             "Squash and fixup fold a commit into the one above it.",
         )

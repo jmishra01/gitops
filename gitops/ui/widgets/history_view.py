@@ -58,7 +58,9 @@ class TextDelegate(QStyledItemDelegate):
         c = colors()
         selected = option.state & QStyle.StateFlag.State_Selected
         painter.setPen(QColor(c.text if selected else c.text_secondary))
-        align = Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignRight if index.column() == 3 else Qt.AlignmentFlag.AlignLeft)
+        align = Qt.AlignmentFlag.AlignVCenter | (
+            Qt.AlignmentFlag.AlignRight if index.column() == 3 else Qt.AlignmentFlag.AlignLeft
+        )
         rect = option.rect.adjusted(8, 0, -14, 0)
         text = option.fontMetrics.elidedText(str(index.data() or ""), Qt.TextElideMode.ElideRight, rect.width())
         painter.drawText(rect, int(align), text)
@@ -137,7 +139,7 @@ class SubjectDelegate(QStyledItemDelegate):
         pill_font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(pill_font)
         fm = painter.fontMetrics()
-        for ref in (commit.refs if commit else ()):
+        for ref in commit.refs if commit else ():
             label, bg, fg = self._style(ref)
             w = fm.horizontalAdvance(label) + 14
             if x + w > r.right() - 80:
@@ -284,7 +286,9 @@ class HistoryView(QWidget):
 
     def populate(self, commits: list[Commit], remotes: list[str]) -> None:
         self.filtered = False
-        selected_sha = self.commits[self.table.currentIndex().row()].sha if self.table.currentIndex().isValid() else None
+        selected_sha = (
+            self.commits[self.table.currentIndex().row()].sha if self.table.currentIndex().isValid() else None
+        )
         self.commits = []
         self.max_lanes = 1
         self.subject_delegate.remotes = set(remotes)
@@ -327,12 +331,14 @@ class HistoryView(QWidget):
             subject = item(commit.subject, tooltip=f"{commit.subject}\n{commit.short_sha}")
             subject.setData(commit.refs, REFS_ROLE)
             subject.setData(commit, COMMIT_ROLE)
-            self.model.appendRow([
-                graph_item,
-                subject,
-                item(commit.author, tooltip=commit.email),
-                item(relative_time(commit.date), tooltip=commit.date.strftime("%Y-%m-%d %H:%M")),
-            ])
+            self.model.appendRow(
+                [
+                    graph_item,
+                    subject,
+                    item(commit.author, tooltip=commit.email),
+                    item(relative_time(commit.date), tooltip=commit.date.strftime("%Y-%m-%d %H:%M")),
+                ]
+            )
         self.max_lanes = max([self.max_lanes] + [g.width for g in rows])
         self.table.horizontalHeader().setSectionResizeMode(0, self.table.horizontalHeader().ResizeMode.Fixed)
         self.table.setColumnWidth(0, max(20 + self.max_lanes * LANE_WIDTH, 44))

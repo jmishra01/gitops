@@ -93,8 +93,12 @@ class MainWindow(QMainWindow):
         # Pages, switched by the nav rail.
         self.pages = QStackedWidget()
         self.page_keys = {
-            "changes": self.changes, "history": self.history, "branches": self.branches,
-            "stashes": self.stashes, "files": self.inspector, "blame": self.inspector,
+            "changes": self.changes,
+            "history": self.history,
+            "branches": self.branches,
+            "stashes": self.stashes,
+            "files": self.inspector,
+            "blame": self.inspector,
             "search": self.content_search,
         }
         for widget in dict.fromkeys(self.page_keys.values()):
@@ -173,10 +177,10 @@ class MainWindow(QMainWindow):
         self.pull_act = self._action("Pull", lambda: self._network("Pulling", lambda b: b.pull()), "Ctrl+Shift+L")
         self.push_act = self._action("Push", lambda: self._network("Pushing", lambda b: b.push()), "Ctrl+Shift+P")
         self.branch_act = self._action("New branch…", lambda: self._new_branch("HEAD"), "Ctrl+Shift+B")
-        self.stash_act = self._action("Stash…", self._stash_save, "Ctrl+Shift+S", "Save your changes and clean the working tree")
-        self.file_history_act = self._action(
-            "File history", lambda: self.show_page(self.file_history), "Ctrl+Shift+H"
+        self.stash_act = self._action(
+            "Stash…", self._stash_save, "Ctrl+Shift+S", "Save your changes and clean the working tree"
         )
+        self.file_history_act = self._action("File history", lambda: self.show_page(self.file_history), "Ctrl+Shift+H")
         self.search_act = self._action("Search history", self._focus_search, "Ctrl+Shift+F")
         self.undo_act = self._action("Undo…", self._open_undo, "Ctrl+Alt+Z", "Restore the branch to an earlier point")
         self.palette_act = self._action("Command palette…", self._open_palette, "Ctrl+K")
@@ -187,9 +191,17 @@ class MainWindow(QMainWindow):
         self.console_act.setText("Git console")
         self.console_act.setShortcut(QKeySequence("Ctrl+`"))
         self.repo_actions = [
-            self.refresh_act, self.fetch_act, self.pull_act, self.push_act,
-            self.branch_act, self.stash_act, self.file_history_act, self.search_act, self.undo_act,
-            self.worktree_act, self.gitignore_act,
+            self.refresh_act,
+            self.fetch_act,
+            self.pull_act,
+            self.push_act,
+            self.branch_act,
+            self.stash_act,
+            self.file_history_act,
+            self.search_act,
+            self.undo_act,
+            self.worktree_act,
+            self.gitignore_act,
         ]
 
         file_menu = self.menuBar().addMenu("&File")
@@ -249,7 +261,9 @@ class MainWindow(QMainWindow):
         if dialog.exec() != CloneDialog.DialogCode.Accepted:
             return
         url, dest = dialog.url.text().strip(), dialog.destination
-        self._network(f"Cloning {url}", lambda _b: GitBackend.clone(url, dest), on_success=lambda: self.open_repo(str(dest)))
+        self._network(
+            f"Cloning {url}", lambda _b: GitBackend.clone(url, dest), on_success=lambda: self.open_repo(str(dest))
+        )
 
     def _fill_recent(self) -> None:
         self.recent_menu.clear()
@@ -373,7 +387,9 @@ class MainWindow(QMainWindow):
             return
         backend, all_refs = self.backend, self.history.all_refs.isChecked()
         task = Task(backend.search_commits, query, all_refs)
-        task.signals.result.connect(lambda commits, b=backend: b is self.backend and self.history.show_filtered(commits, query))
+        task.signals.result.connect(
+            lambda commits, b=backend: b is self.backend and self.history.show_filtered(commits, query)
+        )
         task.signals.error.connect(lambda msg: self.statusBar().showMessage(f"Search failed: {msg}", 5000))
         self.runner.submit(task)
 
@@ -473,7 +489,10 @@ class MainWindow(QMainWindow):
             self._git(lambda b: b.rename_branch(old, new), f"Renamed {old} to {new}")
 
     def _delete_branch(self, name: str) -> None:
-        if QMessageBox.question(self, "Delete branch", f"Delete the local branch {name}?") != QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(self, "Delete branch", f"Delete the local branch {name}?")
+            != QMessageBox.StandardButton.Yes
+        ):
             return
         try:
             self.backend.delete_branch(name)
@@ -544,7 +563,11 @@ class MainWindow(QMainWindow):
                     "\n\nYour SSH key wasn't available. If it has a passphrase, load it into the agent first "
                     "(`ssh-add`, or `ssh-add --apple-use-keychain` on macOS); GitOps can't type it for you."
                 )
-            elif "Authentication failed" in detail or "could not read Username" in detail or "Permission denied" in detail:
+            elif (
+                "Authentication failed" in detail
+                or "could not read Username" in detail
+                or "Permission denied" in detail
+            ):
                 hint = (
                     "\n\nCheck your credentials. For HTTPS, set up a credential helper (e.g. `gh auth setup-git`); "
                     "GitOps uses the same setup as git in your terminal."
@@ -625,7 +648,10 @@ class MainWindow(QMainWindow):
             self._git(lambda b: b.create_tag(name, target, message.strip() or None), f"Tagged {target[:8]} as {name}")
 
     def _delete_tag(self, tag: Tag) -> None:
-        if QMessageBox.question(self, "Delete tag", f"Delete the local tag {tag.name}?") == QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(self, "Delete tag", f"Delete the local tag {tag.name}?")
+            == QMessageBox.StandardButton.Yes
+        ):
             self._git(lambda b: b.delete_tag(tag.name), f"Deleted tag {tag.name}")
 
     # ------------------------------------------------------------------ commit actions
@@ -640,8 +666,10 @@ class MainWindow(QMainWindow):
         menu.addAction("New branch here…", lambda: self._new_branch(commit.sha))
         menu.addAction("New tag here…", lambda: self._create_tag(commit.sha))
         menu.addSeparator()
-        menu.addAction(f"Cherry-pick onto {current}", lambda: self._stoppable_op(
-            f"Cherry-picked {commit.short_sha}", lambda b: b.cherry_pick(commit.sha)))
+        menu.addAction(
+            f"Cherry-pick onto {current}",
+            lambda: self._stoppable_op(f"Cherry-picked {commit.short_sha}", lambda b: b.cherry_pick(commit.sha)),
+        )
         menu.addAction("Revert this commit", lambda: self._revert(commit))
         reset = menu.addMenu(f"Reset {current} to here")
         reset.addAction("Soft: keep changes staged", lambda: self._reset(commit, "soft"))
@@ -670,9 +698,15 @@ class MainWindow(QMainWindow):
 
     def _revert(self, commit: Commit) -> None:
         mainline = 1 if commit.is_merge else None
-        if commit.is_merge and QMessageBox.question(
-            self, "Revert merge", "This is a merge. Revert it relative to its first parent (the branch it was merged into)?"
-        ) != QMessageBox.StandardButton.Yes:
+        if (
+            commit.is_merge
+            and QMessageBox.question(
+                self,
+                "Revert merge",
+                "This is a merge. Revert it relative to its first parent (the branch it was merged into)?",
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
             return
         self._stoppable_op(f"Reverted {commit.short_sha}", lambda b: b.revert(commit.sha, mainline))
 
@@ -851,7 +885,9 @@ class MainWindow(QMainWindow):
         if not self.backend:
             return
         if sub.state == "not initialized":
-            QMessageBox.information(self, "Submodule", "This submodule isn't checked out yet. Use Update all submodules first.")
+            QMessageBox.information(
+                self, "Submodule", "This submodule isn't checked out yet. Use Update all submodules first."
+            )
             return
         self.open_repo(str(self.backend.root / sub.path))
 
@@ -867,8 +903,13 @@ class MainWindow(QMainWindow):
         default = str(self.backend.root.parent / f"{self.backend.root.name}-{name.replace('/', '-')}")
         folder, ok = QInputDialog.getText(self, "Add worktree", "Folder for the new worktree:", text=default)
         if ok and folder.strip():
-            if self._git(lambda b: b.add_worktree(folder.strip(), name, new_branch=True), f"Worktree created at {folder}"):
-                if QMessageBox.question(self, "Worktree created", f"Open {folder} now?") == QMessageBox.StandardButton.Yes:
+            if self._git(
+                lambda b: b.add_worktree(folder.strip(), name, new_branch=True), f"Worktree created at {folder}"
+            ):
+                if (
+                    QMessageBox.question(self, "Worktree created", f"Open {folder} now?")
+                    == QMessageBox.StandardButton.Yes
+                ):
                     self.open_repo(folder.strip())
 
     def _remove_worktree(self, wt: Worktree) -> None:

@@ -25,12 +25,14 @@ class UndoDialog(QDialog):
 
         self.table, model = make_table(["", "Action", "Commit", "When"], 1)
         for n, e in enumerate(self.entries):
-            model.appendRow([
-                item("current" if n == 0 else e.selector),
-                item(e.action, tooltip=e.action),
-                item(e.sha[:8], tooltip=e.sha),
-                item(relative_time(e.date), tooltip=e.date.strftime("%Y-%m-%d %H:%M:%S")),
-            ])
+            model.appendRow(
+                [
+                    item("current" if n == 0 else e.selector),
+                    item(e.action, tooltip=e.action),
+                    item(e.sha[:8], tooltip=e.sha),
+                    item(relative_time(e.date), tooltip=e.date.strftime("%Y-%m-%d %H:%M:%S")),
+                ]
+            )
         self.table.setObjectName("CommitTable")
         self.table.setAlternatingRowColors(False)
         self.table.horizontalHeader().hide()
@@ -54,7 +56,9 @@ class UndoDialog(QDialog):
         layout.addWidget(self.table, 1)
         layout.addWidget(buttons)
         dialog_heading(
-            self, layout, f"Undo on {branch}",
+            self,
+            layout,
+            f"Undo on {branch}",
             f"Every place {branch} has pointed, newest first. Restoring moves the branch back to that point; "
             "uncommitted changes are kept, and git refuses rather than overwrite them.",
         )

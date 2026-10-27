@@ -34,5 +34,9 @@ class StashSaveDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addSpacing(6)
         layout.addWidget(buttons)
-        dialog_heading(self, layout, "Stash changes",
-                       "Your changes are saved aside and the working tree goes back to the last commit.")
+        dialog_heading(
+            self,
+            layout,
+            "Stash changes",
+            "Your changes are saved aside and the working tree goes back to the last commit.",
+        )

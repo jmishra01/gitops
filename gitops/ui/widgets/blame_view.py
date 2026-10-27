@@ -144,7 +144,9 @@ class BlameView(QWidget):
             for cell in row:
                 cell.setBackground(QBrush(QColor(color)))
             self.model.appendRow(row)
-        self.diff.setPlainText(f"{len(lines)} lines from {len({ln.sha for ln in lines})} commits. Click a line to see its commit.")
+        self.diff.setPlainText(
+            f"{len(lines)} lines from {len({ln.sha for ln in lines})} commits. Click a line to see its commit."
+        )
 
     def apply_theme(self) -> None:
         if self.lines:

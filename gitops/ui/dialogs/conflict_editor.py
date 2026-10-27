@@ -198,9 +198,23 @@ class CodeCell(QWidget):
             top = i * LINE_H
             if self.first_no is not None:
                 p.setPen(QColor(c.text_secondary))
-                p.drawText(0, top, gutter - 10, LINE_H, int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), str(self.first_no + i))
+                p.drawText(
+                    0,
+                    top,
+                    gutter - 10,
+                    LINE_H,
+                    int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                    str(self.first_no + i),
+                )
             p.setPen(QColor(c.text_secondary if self.muted else c.text))
-            p.drawText(gutter, top, max(self.width() - gutter - 6, 0), LINE_H, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), text)
+            p.drawText(
+                gutter,
+                top,
+                max(self.width() - gutter - 6, 0),
+                LINE_H,
+                int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                text,
+            )
         p.end()
 
 
@@ -349,11 +363,13 @@ class ConflictResolver(QDialog):
         self.theirs_head = QLabel()
         for label in (self.ours_head, self.result_head, self.theirs_head):
             label.setTextFormat(Qt.TextFormat.RichText)
-        heads = _row((
-            _column_cell("ColOurs", self.ours_head, (14, 10, 14, 10)),
-            _column_cell("ColResult", self.result_head, (14, 10, 14, 10)),
-            _column_cell("ColTheirs", self.theirs_head, (14, 10, 14, 10)),
-        ))
+        heads = _row(
+            (
+                _column_cell("ColOurs", self.ours_head, (14, 10, 14, 10)),
+                _column_cell("ColResult", self.result_head, (14, 10, 14, 10)),
+                _column_cell("ColTheirs", self.theirs_head, (14, 10, 14, 10)),
+            )
+        )
 
         # ---- the three columns
         self.rows_host = QWidget(objectName="ColumnsHost")
@@ -462,8 +478,11 @@ class ConflictResolver(QDialog):
     def _render_header(self) -> None:
         c = colors()
         names = {
-            "merge": "Merging", "rebase": "Rewriting history (rebase)", "cherry-pick": "Cherry-picking",
-            "revert": "Reverting", None: "Applying a stash",
+            "merge": "Merging",
+            "rebase": "Rewriting history (rebase)",
+            "cherry-pick": "Cherry-picking",
+            "revert": "Reverting",
+            None: "Applying a stash",
         }
         title = names.get(self.operation, "Resolving conflicts")
         if self.operation == "merge":
@@ -471,10 +490,14 @@ class ConflictResolver(QDialog):
             title = f"{title} · {subject}" if subject else title
         self.title.setText(title)
         done, total = self._resolved_count(), len(self.paths)
-        self.subtitle.setText(f"{done} of {total} file{'s' if total != 1 else ''} resolved · nothing is committed until you finish")
+        self.subtitle.setText(
+            f"{done} of {total} file{'s' if total != 1 else ''} resolved · nothing is committed until you finish"
+        )
         self.progress.setMaximum(max(total, 1))
         self.progress.setValue(done)
-        self.finish_btn.setText({"merge": "Commit merge", None: "Done"}.get(self.operation, f"Continue {self.operation}"))
+        self.finish_btn.setText(
+            {"merge": "Commit merge", None: "Done"}.get(self.operation, f"Continue {self.operation}")
+        )
         self.abort_btn.setVisible(self.operation is not None)
 
         while self.chips.count():
@@ -488,8 +511,13 @@ class ConflictResolver(QDialog):
                 text, style = f"✓  {path}", f"background:{c.success_soft}; color:{c.success_on_soft};"
             elif current:
                 left = len(st.undecided) if st and not st.special else None
-                note = f" · {left} of {st.conflict_count} conflicts left" if left is not None and st.conflict_count else ""
-                text, style = f"●  {path}{note}", f"background:{c.surface}; color:{c.text}; border: 1.5px solid {c.primary}; font-weight:600;"
+                note = (
+                    f" · {left} of {st.conflict_count} conflicts left" if left is not None and st.conflict_count else ""
+                )
+                text, style = (
+                    f"●  {path}{note}",
+                    f"background:{c.surface}; color:{c.text}; border: 1.5px solid {c.primary}; font-weight:600;",
+                )
             else:
                 text, style = f"●  {path}", f"background:{c.field_bg}; color:{c.text};"
             chip = QPushButton(text)
@@ -508,9 +536,15 @@ class ConflictResolver(QDialog):
         ours_name = self.backend.current_branch() or "HEAD"
         block = next((s.block for s in st.segments if s.is_conflict), None)
         theirs_name = block.theirs_label if block and block.theirs_label else "incoming"
-        self.ours_head.setText(f"<span style='color:{c.primary}'>●</span> <b>Ours</b> <span style='color:{c.text_secondary}'>· {ours_name}</span>")
-        self.result_head.setText(f"<b>Result</b> <span style='color:{c.text_secondary}'>· what gets saved · type in resolved parts</span>")
-        self.theirs_head.setText(f"<span style='color:{c.add_fg}'>●</span> <b>Theirs</b> <span style='color:{c.text_secondary}'>· {theirs_name}</span>")
+        self.ours_head.setText(
+            f"<span style='color:{c.primary}'>●</span> <b>Ours</b> <span style='color:{c.text_secondary}'>· {ours_name}</span>"
+        )
+        self.result_head.setText(
+            f"<b>Result</b> <span style='color:{c.text_secondary}'>· what gets saved · type in resolved parts</span>"
+        )
+        self.theirs_head.setText(
+            f"<span style='color:{c.add_fg}'>●</span> <b>Theirs</b> <span style='color:{c.text_secondary}'>· {theirs_name}</span>"
+        )
         self.encoding_note.setText(
             "Not UTF-8: shown as Latin-1, untouched bytes are kept exactly." if st.encoding != "utf-8" else ""
         )
@@ -565,11 +599,13 @@ class ConflictResolver(QDialog):
         self.scroll.verticalScrollBar().setValue(scroll)
 
     def _plain_row(self, lines: list[str], first_no: int) -> QWidget:
-        return _row((
-            _column_cell("ColOurs", CodeCell(lines, muted=True)),
-            _column_cell("ColResult", CodeCell(lines, first_no)),
-            _column_cell("ColTheirs", CodeCell(lines, muted=True)),
-        ))
+        return _row(
+            (
+                _column_cell("ColOurs", CodeCell(lines, muted=True)),
+                _column_cell("ColResult", CodeCell(lines, first_no)),
+                _column_cell("ColTheirs", CodeCell(lines, muted=True)),
+            )
+        )
 
     def _context_row(self, lines: list[str], first_no: int) -> QWidget:
         if len(lines) <= FOLD_OVER:
@@ -584,7 +620,9 @@ class ConflictResolver(QDialog):
         fold = QPushButton(f"⋯  {hidden} unchanged lines")
         fold.setProperty("variant", "secondary")
         fold.clicked.connect(lambda: self._expand(wrap, lines, first_no))
-        v.addWidget(_row((_column_cell("ColOurs"), _column_cell("ColResult", fold, (14, 2, 14, 2)), _column_cell("ColTheirs"))))
+        v.addWidget(
+            _row((_column_cell("ColOurs"), _column_cell("ColResult", fold, (14, 2, 14, 2)), _column_cell("ColTheirs")))
+        )
         v.addWidget(self._plain_row(lines[-3:], first_no + len(lines) - 3))
         return wrap
 
@@ -596,14 +634,18 @@ class ConflictResolver(QDialog):
         c = colors()
         card = QFrame()
         bg, border = (c.ours_bg, c.ours_border) if ours else (c.theirs_bg, c.theirs_border)
-        card.setStyleSheet(f"QFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }} QLabel {{ border: none; }}")
+        card.setStyleSheet(
+            f"QFrame {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }} QLabel {{ border: none; }}"
+        )
         v = QVBoxLayout(card)
         v.setContentsMargins(0, 4, 0, 6)
         v.setSpacing(4)
         v.addWidget(CodeCell(lines) if lines else QLabel("   (nothing on this side)", objectName="Muted"))
         button = QPushButton("Use ours  →" if ours else "←  Use theirs")
         fill = c.primary if ours else c.success_fill
-        button.setStyleSheet(f"QPushButton {{ background: {fill}; color: #FFFFFF; border: none; border-radius: 6px; padding: 4px 10px; font-weight: 600; }}")
+        button.setStyleSheet(
+            f"QPushButton {{ background: {fill}; color: #FFFFFF; border: none; border-radius: 6px; padding: 4px 10px; font-weight: 600; }}"
+        )
         button.clicked.connect(lambda: self.decide(n, Choice.OURS if ours else Choice.THEIRS))
         row = QHBoxLayout()
         row.setContentsMargins(8, 0, 8, 0)
@@ -629,7 +671,9 @@ class ConflictResolver(QDialog):
         title = QLabel("Choose what goes here")
         title.setStyleSheet("font-weight: 600;")
         v.addWidget(title)
-        detail = QLabel(f"Both sides changed this: {len(block.ours)} line{'s' if len(block.ours) != 1 else ''} ours, {len(block.theirs)} theirs.")
+        detail = QLabel(
+            f"Both sides changed this: {len(block.ours)} line{'s' if len(block.ours) != 1 else ''} ours, {len(block.theirs)} theirs."
+        )
         v.addWidget(detail)
         if self.show_base and block.base is not None:
             base_label = QLabel("Common ancestor")
@@ -688,7 +732,9 @@ class ConflictResolver(QDialog):
         note = QLabel(how, objectName="Muted")
         undo = QPushButton("Undo")
         undo.setFlat(True)
-        undo.setStyleSheet(f"QPushButton {{ color: {c.accent}; text-decoration: underline; border: none; padding: 0 4px; background: transparent; }}")
+        undo.setStyleSheet(
+            f"QPushButton {{ color: {c.accent}; text-decoration: underline; border: none; padding: 0 4px; background: transparent; }}"
+        )
         undo.clicked.connect(lambda: self.undo(n))
         foot = QHBoxLayout()
         foot.setContentsMargins(10, 0, 0, 2)

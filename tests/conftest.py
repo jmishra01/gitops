@@ -17,9 +17,7 @@ class RepoBuilder:
         self.git("init", "-q", "-b", "main")
 
     def git(self, *args: str) -> str:
-        return subprocess.run(
-            ["git", "-C", str(self.path), *args], check=True, capture_output=True, text=True
-        ).stdout
+        return subprocess.run(["git", "-C", str(self.path), *args], check=True, capture_output=True, text=True).stdout
 
     def write(self, rel: str, content: str) -> None:
         target = self.path / rel
@@ -38,9 +36,7 @@ class RepoBuilder:
             "GIT_COMMITTER_DATE": f"{self._tick} +0000",
         }
         subprocess.run(["git", "-C", str(self.path), "add", "-A"], check=True, env=env)
-        subprocess.run(
-            ["git", "-C", str(self.path), "commit", "-q", "-m", message], check=True, env=env
-        )
+        subprocess.run(["git", "-C", str(self.path), "commit", "-q", "-m", message], check=True, env=env)
         return self.git("rev-parse", "HEAD").strip()
 
 

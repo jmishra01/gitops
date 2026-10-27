@@ -75,8 +75,16 @@ def _terminal(p: QPainterPath) -> None:
 
 def _settings(p: QPainterPath) -> None:
     p.addEllipse(QPointF(12, 12), 3, 3)
-    for a, b in (((12, 2), (12, 5)), ((12, 19), (12, 22)), ((2, 12), (5, 12)), ((19, 12), (22, 12)),
-                 ((4.9, 4.9), (7, 7)), ((17, 17), (19.1, 19.1)), ((4.9, 19.1), (7, 17)), ((17, 7), (19.1, 4.9))):
+    for a, b in (
+        ((12, 2), (12, 5)),
+        ((12, 19), (12, 22)),
+        ((2, 12), (5, 12)),
+        ((19, 12), (22, 12)),
+        ((4.9, 4.9), (7, 7)),
+        ((17, 17), (19.1, 19.1)),
+        ((4.9, 19.1), (7, 17)),
+        ((17, 7), (19.1, 4.9)),
+    ):
         p.moveTo(*a)
         p.lineTo(*b)
 
@@ -170,10 +178,23 @@ def _cloud(p: QPainterPath) -> None:
 
 
 SHAPES = {
-    "branch": _branch, "folder": _folder, "search": _search, "sync": _sync, "undo": _undo,
-    "terminal": _terminal, "settings": _settings, "changes": _changes, "history": _history,
-    "file": _file, "blame": _blame, "grid": _grid, "chevron": _chevron, "logo": _logo,
-    "stash": _stash, "tag": _tag, "cloud": _cloud,
+    "branch": _branch,
+    "folder": _folder,
+    "search": _search,
+    "sync": _sync,
+    "undo": _undo,
+    "terminal": _terminal,
+    "settings": _settings,
+    "changes": _changes,
+    "history": _history,
+    "file": _file,
+    "blame": _blame,
+    "grid": _grid,
+    "chevron": _chevron,
+    "logo": _logo,
+    "stash": _stash,
+    "tag": _tag,
+    "cloud": _cloud,
 }
 
 
@@ -184,7 +205,9 @@ def pixmap(name: str, color: str, size: int = 20, width: float = 2.0, ratio: flo
     painter = QPainter(pm)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.scale(size / 24, size / 24)
-    painter.setPen(QPen(QColor(color), width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setPen(
+        QPen(QColor(color), width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    )
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawPath(_path(SHAPES[name]))
     painter.end()

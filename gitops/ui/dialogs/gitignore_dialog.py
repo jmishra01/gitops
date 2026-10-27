@@ -50,7 +50,9 @@ class GitignoreDialog(QDialog):
         layout.addLayout(test_row)
         layout.addWidget(self.result)
         layout.addWidget(buttons)
-        dialog_heading(self, layout, ".gitignore", f"Files matching these rules are left out of git. {backend.gitignore_path()}")
+        dialog_heading(
+            self, layout, ".gitignore", f"Files matching these rules are left out of git. {backend.gitignore_path()}"
+        )
 
     def _test(self, path: str) -> None:
         path = path.strip()
@@ -79,7 +81,7 @@ class GitignoreDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Can't save these characters",
-                f"“{exc.object[exc.start:exc.end]}” can't be stored in this file's encoding ({self.encoding}).",
+                f"“{exc.object[exc.start : exc.end]}” can't be stored in this file's encoding ({self.encoding}).",
             )
             return
         self.backend.gitignore_path().write_bytes(data)

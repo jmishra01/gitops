@@ -56,7 +56,9 @@ def test_hooks_cannot_reach_a_terminal(repo, backend):
     # A hook stands in for ssh/gpg: anything git starts must find no controlling terminal to prompt on.
     report = repo.path / "tty-report"
     hook = repo.path / ".git" / "hooks" / "pre-commit"
-    hook.write_text(f'#!/bin/sh\nif ( : < /dev/tty ) 2>/dev/null; then echo has-tty; else echo no-tty; fi > "{report}"\n')
+    hook.write_text(
+        f'#!/bin/sh\nif ( : < /dev/tty ) 2>/dev/null; then echo has-tty; else echo no-tty; fi > "{report}"\n'
+    )
     hook.chmod(hook.stat().st_mode | stat.S_IEXEC)
     repo.write("a.txt", "changed\n")
     backend.stage("a.txt")

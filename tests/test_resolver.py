@@ -92,7 +92,11 @@ def test_take_all_and_mark_resolved_moves_to_next_file(merge, qtbot):
 def test_undecided_warns_before_saving(merge, qtbot, monkeypatch):
     repo, backend = merge
     asked = []
-    monkeypatch.setattr(conflict_editor.QMessageBox, "warning", lambda *a, **k: asked.append(a[2]) or conflict_editor.QMessageBox.StandardButton.Cancel)
+    monkeypatch.setattr(
+        conflict_editor.QMessageBox,
+        "warning",
+        lambda *a, **k: asked.append(a[2]) or conflict_editor.QMessageBox.StandardButton.Cancel,
+    )
     r = ConflictResolver(backend, "b.txt")
     qtbot.addWidget(r)
     r.mark_resolved()

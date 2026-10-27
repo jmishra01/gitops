@@ -67,7 +67,9 @@ class StashesView(QWidget):
         self.list.current_row.connect(self._show)
         self.list.activated_row.connect(lambda row: self.action_requested.emit("apply", row.data))
         self.list.menu_requested.connect(self._menu)
-        self.list_empty = QLabel("No stashes.\nStash your changes to switch tasks without committing.", objectName="EmptyState")
+        self.list_empty = QLabel(
+            "No stashes.\nStash your changes to switch tasks without committing.", objectName="EmptyState"
+        )
         self.list_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.list_stack = QStackedWidget()
         self.list_stack.addWidget(self.list)

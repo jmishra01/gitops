@@ -145,7 +145,11 @@ class TimelineScrubber(QWidget):
         for t in range(ticks + 1):
             frac = t / ticks
             when = datetime.fromtimestamp(lo + (hi - lo) * frac).astimezone()
-            label = when.strftime("%b %d") if t in (0, ticks) else when.strftime("%b %Y" if hi - lo > 300 * 86400 else "%b %d")
+            label = (
+                when.strftime("%b %d")
+                if t in (0, ticks)
+                else when.strftime("%b %Y" if hi - lo > 300 * 86400 else "%b %d")
+            )
             if t == ticks and self.marks[0].kind == "working":
                 label = "Now"
             x = left + (right - left) * frac

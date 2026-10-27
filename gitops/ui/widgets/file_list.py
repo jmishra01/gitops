@@ -110,8 +110,16 @@ class FileRowDelegate(QStyledItemDelegate):
         painter.setBrush(QColor(c.primary) if row.staged else QColor(c.surface))
         painter.drawRoundedRect(box.adjusted(0, 0, -1, -1), 4, 4)
         if row.staged:
-            painter.setPen(QPen(QColor("#FFFFFF"), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-            painter.drawPolyline([QPoint(box.left() + 4, box.top() + 8), QPoint(box.left() + 7, box.top() + 11), QPoint(box.left() + 12, box.top() + 5)])
+            painter.setPen(
+                QPen(QColor("#FFFFFF"), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            )
+            painter.drawPolyline(
+                [
+                    QPoint(box.left() + 4, box.top() + 8),
+                    QPoint(box.left() + 7, box.top() + 11),
+                    QPoint(box.left() + 12, box.top() + 5),
+                ]
+            )
 
         # Status chip
         chip_text, _tip, (bg, fg) = CHIPS.get(row.letter, (row.letter, "", ("field_bg", "text")))
@@ -160,7 +168,11 @@ class FileRowDelegate(QStyledItemDelegate):
         left = chip.right() + 10
         available = max(right - left, 10)
         fm = painter.fontMetrics()
-        label = row.name if row.letter not in "RC" or not row.orig_path else f"{PurePosixPath(row.orig_path).name} → {row.name}"
+        label = (
+            row.name
+            if row.letter not in "RC" or not row.orig_path
+            else f"{PurePosixPath(row.orig_path).name} → {row.name}"
+        )
         name = fm.elidedText(label, Qt.TextElideMode.ElideMiddle, available)
         painter.setPen(QColor(c.text))
         painter.drawText(QRect(left, r.top(), available, r.height()), int(Qt.AlignmentFlag.AlignVCenter), name)
@@ -170,7 +182,11 @@ class FileRowDelegate(QStyledItemDelegate):
             fm2 = painter.fontMetrics()
             folder = fm2.elidedText(row.folder, Qt.TextElideMode.ElideLeft, available - name_w - 6)
             painter.setPen(QColor(c.text_secondary))
-            painter.drawText(QRect(left + name_w + 6, r.top(), available - name_w - 6, r.height()), int(Qt.AlignmentFlag.AlignVCenter), folder)
+            painter.drawText(
+                QRect(left + name_w + 6, r.top(), available - name_w - 6, r.height()),
+                int(Qt.AlignmentFlag.AlignVCenter),
+                folder,
+            )
         painter.restore()
 
     def helpEvent(self, event, view, option, index) -> bool:

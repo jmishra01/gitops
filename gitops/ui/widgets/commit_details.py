@@ -124,7 +124,9 @@ class CommitFileDelegate(QStyledItemDelegate):
             painter.setFont(option.font)
             folder_shown = painter.fontMetrics().elidedText(folder, Qt.TextElideMode.ElideLeft, avail - used)
             painter.setPen(QColor(c.text_secondary))
-            painter.drawText(QRect(left + used, r.top(), avail - used, r.height()), int(Qt.AlignmentFlag.AlignVCenter), folder_shown)
+            painter.drawText(
+                QRect(left + used, r.top(), avail - used, r.height()), int(Qt.AlignmentFlag.AlignVCenter), folder_shown
+            )
         painter.restore()
 
 
@@ -135,7 +137,17 @@ class CommitDetails(QFrame):
     open_file_history = Signal(str)
     open_blame = Signal(str, object)  # (path, rev)
 
-    ACTIONS = ("checkout", "cherry_pick", "revert", "new_branch", "new_tag", "reset_soft", "reset_mixed", "reset_hard", "rebase_from")
+    ACTIONS = (
+        "checkout",
+        "cherry_pick",
+        "revert",
+        "new_branch",
+        "new_tag",
+        "reset_soft",
+        "reset_mixed",
+        "reset_hard",
+        "rebase_from",
+    )
 
     def __init__(self, runner: TaskRunner, parent=None):
         super().__init__(parent, objectName="Panel")
@@ -171,7 +183,9 @@ class CommitDetails(QFrame):
         meta.addWidget(self.parents)
         meta.addStretch(1)
 
-        self.checkout_btn = self._button("Check out", "checkout", "Look at this commit (detached HEAD); no branch moves")
+        self.checkout_btn = self._button(
+            "Check out", "checkout", "Look at this commit (detached HEAD); no branch moves"
+        )
         self.pick_btn = self._button("Cherry-pick", "cherry_pick", "Copy this commit onto your current branch")
         self.revert_btn = self._button("Revert", "revert", "Make a new commit that undoes this one")
         self.here_btn = QToolButton(text="Branch or tag here  ▾")
@@ -193,7 +207,13 @@ class CommitDetails(QFrame):
         more.addAction("Edit commits after this one…", lambda: self._emit("rebase_from"))
         more.addSeparator()
         more.addAction("Copy SHA", self._copy_sha)
-        more.addAction("Copy message", lambda: self.commit and QGuiApplication.clipboard().setText(self.subject.text() + ("\n\n" + self.body.text() if self.body.text() else "")))
+        more.addAction(
+            "Copy message",
+            lambda: self.commit
+            and QGuiApplication.clipboard().setText(
+                self.subject.text() + ("\n\n" + self.body.text() if self.body.text() else "")
+            ),
+        )
         self.more_btn.setMenu(more)
         actions = QHBoxLayout()
         actions.setSpacing(8)
@@ -244,7 +264,9 @@ class CommitDetails(QFrame):
         self.diff_name = QLabel(objectName="FileTitle")
         self.inspect_btn = QPushButton("Open in file inspector")
         self.inspect_btn.setProperty("variant", "secondary")
-        self.inspect_btn.clicked.connect(lambda: self._current_file() and self.open_file_history.emit(self._current_file().path))
+        self.inspect_btn.clicked.connect(
+            lambda: self._current_file() and self.open_file_history.emit(self._current_file().path)
+        )
         self.blame_btn = QPushButton("Blame")
         self.blame_btn.setProperty("variant", "secondary")
         self.blame_btn.clicked.connect(self._blame_current)
@@ -358,7 +380,10 @@ class CommitDetails(QFrame):
         self.body.setVisible(bool(body))
         self.files = files
         n = len(files)
-        self.files_label.setText(f"{n} FILE{'S' if n != 1 else ''} CHANGED" + (" · VS FIRST PARENT" if self.commit and self.commit.is_merge else ""))
+        self.files_label.setText(
+            f"{n} FILE{'S' if n != 1 else ''} CHANGED"
+            + (" · VS FIRST PARENT" if self.commit and self.commit.is_merge else "")
+        )
         self._render_totals()
         for f in files:
             it = QStandardItem()
@@ -369,7 +394,9 @@ class CommitDetails(QFrame):
         if files:
             self.file_list.setCurrentIndex(self.file_model.index(0, 0))
         else:
-            self.text.setPlainText("This commit changes no files (an empty commit, or a merge that took one side as is).")
+            self.text.setPlainText(
+                "This commit changes no files (an empty commit, or a merge that took one side as is)."
+            )
 
     # Rich text bakes colours in, so these are re-rendered when the theme changes.
     def _render_byline(self) -> None:
@@ -377,15 +404,19 @@ class CommitDetails(QFrame):
             return
         c = colors()
         verb = "merged" if self.commit.is_merge else "committed"
-        self.byline.setText(f"<span style='color:{c.text}; font-weight:600'>{self.commit.author}</span> "
-                            f"<span style='color:{c.text_secondary}'>{verb} {relative_time(self.commit.date)}</span>")
+        self.byline.setText(
+            f"<span style='color:{c.text}; font-weight:600'>{self.commit.author}</span> "
+            f"<span style='color:{c.text_secondary}'>{verb} {relative_time(self.commit.date)}</span>"
+        )
 
     def _render_totals(self) -> None:
         c = colors()
         added = sum(f.added or 0 for f in self.files)
         removed = sum(f.removed or 0 for f in self.files)
-        self.totals.setText(f"<span style='color:{c.add_fg}; font-family:monospace'>+{added}</span> "
-                            f"<span style='color:{c.del_fg}; font-family:monospace'>−{removed}</span>")
+        self.totals.setText(
+            f"<span style='color:{c.add_fg}; font-family:monospace'>+{added}</span> "
+            f"<span style='color:{c.del_fg}; font-family:monospace'>−{removed}</span>"
+        )
 
     def apply_theme(self) -> None:
         self._render_byline()
@@ -408,7 +439,11 @@ class CommitDetails(QFrame):
         if not current.isValid() or not self.commit or not self.backend:
             return
         f: CommitFile = current.data(FILE_ROLE)
-        self.diff_name.setText(f"{PurePosixPath(f.old_path).name} → {PurePosixPath(f.path).name}" if f.old_path else PurePosixPath(f.path).name)
+        self.diff_name.setText(
+            f"{PurePosixPath(f.old_path).name} → {PurePosixPath(f.path).name}"
+            if f.old_path
+            else PurePosixPath(f.path).name
+        )
         self.diff_name.setToolTip(f.path)
         self.blame_btn.setEnabled(f.status != "D")
         try:

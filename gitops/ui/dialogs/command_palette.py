@@ -58,8 +58,11 @@ class CommandDelegate(QStyledItemDelegate):
         x += fm.horizontalAdvance(name) + 10
         if path and right - x > 30:
             painter.setPen(QColor(c.text_secondary))
-            painter.drawText(QRect(x, r.top(), right - x, r.height()), int(Qt.AlignmentFlag.AlignVCenter),
-                             fm.elidedText(path, Qt.TextElideMode.ElideLeft, right - x))
+            painter.drawText(
+                QRect(x, r.top(), right - x, r.height()),
+                int(Qt.AlignmentFlag.AlignVCenter),
+                fm.elidedText(path, Qt.TextElideMode.ElideLeft, right - x),
+            )
         painter.restore()
 
 
@@ -100,7 +103,11 @@ class CommandPalette(QDialog):
 
     def eventFilter(self, obj, event) -> bool:
         # Arrow keys move through the list while typing stays in the search box.
-        if obj is self.query and event.type() == event.Type.KeyPress and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+        if (
+            obj is self.query
+            and event.type() == event.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down)
+        ):
             step = -1 if event.key() == Qt.Key.Key_Up else 1
             row = max(0, min(self.list.count() - 1, self.list.currentRow() + step))
             self.list.setCurrentRow(row)

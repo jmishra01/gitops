@@ -116,7 +116,13 @@ class HunkLines(QWidget):
                 painter.drawRoundedRect(box, 3, 3)
                 if is_selected:
                     painter.setPen(QPen(QColor("#FFFFFF"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                    painter.drawPolyline([QPoint(box.left() + 3, box.top() + 7), QPoint(box.left() + 6, box.top() + 10), QPoint(box.left() + 11, box.top() + 4)])
+                    painter.drawPolyline(
+                        [
+                            QPoint(box.left() + 3, box.top() + 7),
+                            QPoint(box.left() + 6, box.top() + 10),
+                            QPoint(box.left() + 11, box.top() + 4),
+                        ]
+                    )
 
             painter.setPen(QColor(c.text_secondary))
             align_right = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -127,7 +133,9 @@ class HunkLines(QWidget):
             left_mid = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             if line.kind in ("+", "-"):
                 painter.setPen(QColor(c.add_fg if line.kind == "+" else c.del_fg))
-                painter.drawText(QRect(CHECK_W + OLD_W + NEW_W, top, SIGN_W, LINE_HEIGHT), left_mid, "+" if line.kind == "+" else "−")
+                painter.drawText(
+                    QRect(CHECK_W + OLD_W + NEW_W, top, SIGN_W, LINE_HEIGHT), left_mid, "+" if line.kind == "+" else "−"
+                )
             if line.kind == "\\":
                 painter.setPen(QColor(c.text_secondary))
                 italic = QFont(self.font_)
@@ -176,7 +184,9 @@ class HunkCard(QFrame):
         header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         old_count = sum(1 for _i, raw in hunk.lines if raw[:1] in (" ", "-", ""))
         new_count = sum(1 for _i, raw in hunk.lines if raw[:1] in (" ", "+", ""))
-        title = QLabel(f"@@ -{hunk.old_start},{old_count} +{hunk.new_start},{new_count} @@", objectName="HunkHeaderText")
+        title = QLabel(
+            f"@@ -{hunk.old_start},{old_count} +{hunk.new_start},{new_count} @@", objectName="HunkHeaderText"
+        )
         title.setFont(mono_font(self.font()))
         context = QLabel(hunk.section.strip(), objectName="Muted")
         context.setFont(mono_font(self.font()))

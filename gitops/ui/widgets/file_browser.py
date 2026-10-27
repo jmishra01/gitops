@@ -142,7 +142,9 @@ class FileBrowser(QWidget):
                 it.setToolTip(path)
                 model.appendRow(it)
         if query.strip():
-            self.count.setText("No files match." if not total else f"{total}{'+' if total >= MAX_RESULTS else ''} matching files")
+            self.count.setText(
+                "No files match." if not total else f"{total}{'+' if total >= MAX_RESULTS else ''} matching files"
+            )
         else:
             shown = "" if total <= MAX_RESULTS else f" (showing the first {MAX_RESULTS}; type to narrow)"
             self.count.setText(f"{total} tracked files{shown}")

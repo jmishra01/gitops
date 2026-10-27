@@ -139,9 +139,17 @@ class SplitCanvas(QWidget):
                 elif row.kind in ("replace", "insert") and side == 1:
                     p.fillRect(rect, QColor(c.add_bg))
                 p.setPen(QColor(c.text_secondary))
-                p.drawText(QRect(x0, top, NUM_W - 10, ROW_H), int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), str(number))
+                p.drawText(
+                    QRect(x0, top, NUM_W - 10, ROW_H),
+                    int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                    str(number),
+                )
                 p.setPen(QColor(c.text))
-                p.drawText(QRect(x0 + NUM_W, top, half - NUM_W - 6, ROW_H), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), text.replace("\t", "    "))
+                p.drawText(
+                    QRect(x0 + NUM_W, top, half - NUM_W - 6, ROW_H),
+                    int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                    text.replace("\t", "    "),
+                )
         p.setPen(QPen(QColor(c.border), 1))
         p.drawLine(half, event.rect().top(), half, event.rect().bottom())
         p.end()
@@ -205,7 +213,9 @@ class VersionDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(r, 10, 10)
 
         dot = QRect(r.left() + 12, r.top() + 10, 22, 22)
-        kind_color = {"created": c.add_fg, "deleted": c.del_fg, "renamed": c.hunk, "working": c.text}.get(v.mark_kind, c.text_secondary)
+        kind_color = {"created": c.add_fg, "deleted": c.del_fg, "renamed": c.hunk, "working": c.text}.get(
+            v.mark_kind, c.text_secondary
+        )
         fill = c.primary if is_a else (c.text if is_b else kind_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(fill))
@@ -237,13 +247,21 @@ class VersionDelegate(QStyledItemDelegate):
         painter.setFont(title)
         painter.setPen(QColor(c.text))
         tw = right - left
-        painter.drawText(QRect(left, r.top() + 8, tw, 20), int(Qt.AlignmentFlag.AlignVCenter), painter.fontMetrics().elidedText(v.subject, Qt.TextElideMode.ElideRight, tw))
+        painter.drawText(
+            QRect(left, r.top() + 8, tw, 20),
+            int(Qt.AlignmentFlag.AlignVCenter),
+            painter.fontMetrics().elidedText(v.subject, Qt.TextElideMode.ElideRight, tw),
+        )
         painter.setFont(option.font)
         painter.setPen(QColor(c.text_secondary))
         when = "now" if v.is_working else relative_time(v.when)
         meta = f"{v.kind} · {v.author} · {when}" + (f" · {v.short}" if not v.is_working else "")
         width = r.right() - 12 - left
-        painter.drawText(QRect(left, r.top() + 29, width, 18), int(Qt.AlignmentFlag.AlignVCenter), painter.fontMetrics().elidedText(meta, Qt.TextElideMode.ElideRight, width))
+        painter.drawText(
+            QRect(left, r.top() + 29, width, 18),
+            int(Qt.AlignmentFlag.AlignVCenter),
+            painter.fontMetrics().elidedText(meta, Qt.TextElideMode.ElideRight, width),
+        )
         painter.restore()
 
 
@@ -507,8 +525,12 @@ class FileInspector(QWidget):
 
     def apply_theme(self) -> None:
         c = colors()
-        self.chip_a.setStyleSheet(f"background: {c.accent_soft}; color: {c.accent_on_soft}; border-radius: 8px; padding: 4px 10px; font-weight: 600;")
-        self.chip_b.setStyleSheet(f"background: {c.text}; color: {c.surface}; border-radius: 8px; padding: 4px 10px; font-weight: 600;")
+        self.chip_a.setStyleSheet(
+            f"background: {c.accent_soft}; color: {c.accent_on_soft}; border-radius: 8px; padding: 4px 10px; font-weight: 600;"
+        )
+        self.chip_b.setStyleSheet(
+            f"background: {c.text}; color: {c.surface}; border-radius: 8px; padding: 4px 10px; font-weight: 600;"
+        )
         self.head_a.setStyleSheet(f"color: {c.accent_on_soft}; font-weight: 600;")
         self.head_b.setStyleSheet(f"color: {c.text}; font-weight: 600;")
         self.list.viewport().update()
@@ -569,7 +591,12 @@ class FileInspector(QWidget):
         self.entries = []
         self.split.set_rows([])
         self._generation += 1
-        generation, backend, follow, all_refs = self._generation, self.backend, self.follow_act.isChecked(), self.all_refs_act.isChecked()
+        generation, backend, follow, all_refs = (
+            self._generation,
+            self.backend,
+            self.follow_act.isChecked(),
+            self.all_refs_act.isChecked(),
+        )
         target = self.path
 
         def load():
@@ -775,7 +802,9 @@ class FileInspector(QWidget):
             return
         data = version_bytes(self.backend, v)
         if data is None:
-            QMessageBox.information(self, "Restore", "The file doesn't exist in this version, so there's nothing to restore.")
+            QMessageBox.information(
+                self, "Restore", "The file doesn't exist in this version, so there's nothing to restore."
+            )
             return
         has_local_edits = bool(self.versions) and self.versions[0].subject == "Uncommitted changes"
         consequence = (

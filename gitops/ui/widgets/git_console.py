@@ -9,8 +9,20 @@ from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QPlainTextEdit, QPushButto
 
 # Commands that only read state. Hidden by default so the console shows what changed things.
 READ_ONLY = {
-    "status", "rev-parse", "log", "show", "diff", "for-each-ref", "rev-list", "blame", "grep",
-    "remote", "check-ref-format", "reflog", "cat-file", "ls-files",
+    "status",
+    "rev-parse",
+    "log",
+    "show",
+    "diff",
+    "for-each-ref",
+    "rev-list",
+    "blame",
+    "grep",
+    "remote",
+    "check-ref-format",
+    "reflog",
+    "cat-file",
+    "ls-files",
 }
 
 

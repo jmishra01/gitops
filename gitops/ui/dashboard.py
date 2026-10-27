@@ -56,7 +56,12 @@ class CardState:
         return groups
 
 
-OPERATION_CHIPS = {"merge": "Merge in progress", "rebase": "Rebase paused", "cherry-pick": "Cherry-pick paused", "revert": "Revert paused"}
+OPERATION_CHIPS = {
+    "merge": "Merge in progress",
+    "rebase": "Rebase paused",
+    "cherry-pick": "Cherry-pick paused",
+    "revert": "Revert paused",
+}
 
 
 def card_state(s: RepoSummary) -> CardState:
@@ -220,7 +225,9 @@ class RepoCard(QFrame):
         s, st = self.summary, self.state
         bg, fg, border = _chip_colors(st.kind)
         self.chip.setText(st.chip)
-        self.chip.setStyleSheet(f"background: {bg}; color: {fg}; border-radius: 10px; padding: 3px 10px; font-weight: 600;")
+        self.chip.setStyleSheet(
+            f"background: {bg}; color: {fg}; border-radius: 10px; padding: 3px 10px; font-weight: 600;"
+        )
         self.setStyleSheet(
             f"QFrame#RepoCard {{ background: {c.surface}; border: 1px solid {border}; border-radius: 12px; }}"
             f" QFrame#RepoCard QLabel {{ background: transparent; border: none; }}"
@@ -251,7 +258,9 @@ class RepoCard(QFrame):
         self.status.setVisible(bool(shown))
         self.status.setToolTip(shown)
         self.status.setStyleSheet(f"color: {c.danger_on_soft};" if self.note and not self.busy_text else "")
-        self.status.setText(self.status.fontMetrics().elidedText(shown, Qt.TextElideMode.ElideRight, max(self.width() - 40, 160)))
+        self.status.setText(
+            self.status.fontMetrics().elidedText(shown, Qt.TextElideMode.ElideRight, max(self.width() - 40, 160))
+        )
         self.action_btn.setVisible(st.action is not None)
         self.action_btn.setText(st.action_label)
         self.action_btn.setEnabled(not self.busy_text)
@@ -266,9 +275,17 @@ class RepoCard(QFrame):
         """Fit the path and last commit subject to the card's width (cheap; safe on resize)."""
         s = self.summary
         width = max(self.width() - 140, 160)
-        self.path.setText(self.path.fontMetrics().elidedText(s.path.replace(str(Path.home()), "~"), Qt.TextElideMode.ElideMiddle, width))
+        self.path.setText(
+            self.path.fontMetrics().elidedText(
+                s.path.replace(str(Path.home()), "~"), Qt.TextElideMode.ElideMiddle, width
+            )
+        )
         if s.last_commit and not s.error:
-            self.last.setText(self.last.fontMetrics().elidedText(s.last_commit.subject, Qt.TextElideMode.ElideRight, max(self.width() - 40, 160)))
+            self.last.setText(
+                self.last.fontMetrics().elidedText(
+                    s.last_commit.subject, Qt.TextElideMode.ElideRight, max(self.width() - 40, 160)
+                )
+            )
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

@@ -361,7 +361,9 @@ def test_dashboard_lists_repos_with_state(window, repo, tmp_path, qtbot):
     window._open_dashboard()
     dash = window.dashboard
     dash.set_repos([str(repo.path), str(other), str(tmp_path / "missing")])
-    qtbot.waitUntil(lambda: len(dash.cards) == 3 and dash.task is not None and "checking" not in dash.subtitle.text(), timeout=5000)
+    qtbot.waitUntil(
+        lambda: len(dash.cards) == 3 and dash.task is not None and "checking" not in dash.subtitle.text(), timeout=5000
+    )
     chips = {Path(p).name: card.state.chip for p, card in dash.cards.items()}
     assert chips == {"missing": "Unavailable", "other": "Detached", "repo": "1 change"}
 

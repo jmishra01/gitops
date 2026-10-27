@@ -56,7 +56,11 @@ def test_identical_and_compare_rows(window, qtbot):
     qtbot.waitUntil(lambda: ins.compare_text() == "A and B are identical.", timeout=5000)  # clean working copy
     ins.set_a(4)
     qtbot.waitUntil(lambda: bool(ins.split.rows), timeout=5000)
-    assert [(r.kind, r.left_no, r.right_no) for r in ins.split.rows] == [("equal", 1, 1), ("insert", None, 2), ("insert", None, 3)]
+    assert [(r.kind, r.left_no, r.right_no) for r in ins.split.rows] == [
+        ("equal", 1, 1),
+        ("insert", None, 2),
+        ("insert", None, 3),
+    ]
     assert ins.split.first_change() == 1
 
 

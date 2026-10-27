@@ -43,7 +43,11 @@ def click(widget, point: QPoint, button=Qt.MouseButton.LeftButton, modifiers=Qt.
 
 def checkbox_center(files) -> QPoint:
     """Centre of the first file row's checkbox (row 0 is the section header)."""
-    index = next(files.model_.index(r, 0) for r in range(files.model_.rowCount()) if isinstance(files.model_.item(r).data(ROW_ROLE), FileRow))
+    index = next(
+        files.model_.index(r, 0)
+        for r in range(files.model_.rowCount())
+        if isinstance(files.model_.item(r).data(ROW_ROLE), FileRow)
+    )
     return FileRowDelegate.checkbox_rect(files.visualRect(index)).center()
 
 
@@ -131,7 +135,9 @@ def test_discard_lines_only_touches_selected(window, repo, monkeypatch):
     changes.select_file("src/app.py")
     for raw in ("-line 2", "+TWO"):
         changes.hunks.set_line(changes.hunks.find_line(raw), True)
-    monkeypatch.setattr(changes_view.QMessageBox, "warning", lambda *a, **k: changes_view.QMessageBox.StandardButton.Discard)
+    monkeypatch.setattr(
+        changes_view.QMessageBox, "warning", lambda *a, **k: changes_view.QMessageBox.StandardButton.Discard
+    )
     changes.discard_selected_lines()
     text = (repo.path / "src/app.py").read_text()
     assert "TWO" not in text and "line 2\n" in text and "SEVENTEEN" in text

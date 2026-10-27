@@ -16,7 +16,17 @@ from gitops.ui.dashboard import DashboardWindow, card_state  # noqa: E402
 
 
 def summary(**kw) -> RepoSummary:
-    base = dict(path="/r", name="r", branch="main", changed=0, conflicts=0, ahead_behind=(0, 0), stashes=0, last_commit=None, operation=None)
+    base = dict(
+        path="/r",
+        name="r",
+        branch="main",
+        changed=0,
+        conflicts=0,
+        ahead_behind=(0, 0),
+        stashes=0,
+        last_commit=None,
+        operation=None,
+    )
     base.update(kw)
     return RepoSummary(**base)
 
@@ -42,7 +52,9 @@ def test_card_state(kw, kind, chip, action, groups):
 
 
 def run(*args, cwd=None):
-    subprocess.run(["git", "-c", "user.name=T", "-c", "user.email=t@x", *args], cwd=cwd, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=T", "-c", "user.email=t@x", *args], cwd=cwd, check=True, capture_output=True
+    )
 
 
 @pytest.fixture

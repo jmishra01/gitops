@@ -42,8 +42,10 @@ def test_tracking_chip():
 
 def test_sections_group_remotes_and_filter():
     branches = [
-        branch("zeta"), branch("main", is_current=True, upstream="origin/main"),
-        branch("origin/HEAD", is_remote=True), branch("origin/main", is_remote=True),
+        branch("zeta"),
+        branch("main", is_current=True, upstream="origin/main"),
+        branch("origin/HEAD", is_remote=True),
+        branch("origin/main", is_remote=True),
         branch("upstream/dev", is_remote=True),
     ]
     tags = [Tag("v1", "b" * 40, True, "first release")]
@@ -59,7 +61,11 @@ def test_sections_group_remotes_and_filter():
 
 
 def test_actions_depend_on_row():
-    sections = dict(build_sections([branch("main", is_current=True), branch("topic"), branch("origin/x", is_remote=True)], [], [], [], None))
+    sections = dict(
+        build_sections(
+            [branch("main", is_current=True), branch("topic"), branch("origin/x", is_remote=True)], [], [], [], None
+        )
+    )
     current, topic = sections["Local branches"]
     keys = lambda row: [a.key for a in actions_for(row, "main", ["origin"], None)]  # noqa: E731
     assert keys(topic) == ["checkout", "merge", "rebase", "new_branch", "show", "rename", "delete"]
@@ -88,7 +94,9 @@ def test_branch_page_actions_run(window, qtbot):
 
     page.buttons_box.itemAt(0).widget().click()
     assert window.backend.current_branch() == "topic"
-    qtbot.waitUntil(lambda: (r := page.list.current()) is not None and r.key == "local:topic" and r.current, timeout=5000)
+    qtbot.waitUntil(
+        lambda: (r := page.list.current()) is not None and r.key == "local:topic" and r.current, timeout=5000
+    )
 
 
 def test_stashes_page_empty_state(window, qtbot):

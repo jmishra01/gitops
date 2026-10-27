@@ -100,6 +100,8 @@ def _kill(proc: subprocess.Popen[bytes]) -> None:
         os.killpg(proc.pid, signal.SIGKILL)
     except (AttributeError, ProcessLookupError, PermissionError, OSError):  # Windows, or already gone
         proc.kill()
+
+
 _PROGRESS_SPLIT = re.compile(rb"[\r\n]")
 # diff3 markers include the common ancestor, so the conflict editor can offer "use base".
 _DIFF3 = ("-c", "merge.conflictStyle=diff3")
@@ -294,8 +296,14 @@ class GitBackend:
             "--format="
             + US.join(
                 (
-                    "%(refname)", "%(objectname)", "%(HEAD)", "%(upstream:short)", "%(upstream:track,nobracket)",
-                    "%(committerdate:unix)", "%(authorname)", "%(contents:subject)",
+                    "%(refname)",
+                    "%(objectname)",
+                    "%(HEAD)",
+                    "%(upstream:short)",
+                    "%(upstream:track,nobracket)",
+                    "%(committerdate:unix)",
+                    "%(authorname)",
+                    "%(contents:subject)",
                 )
             ),
             "refs/heads",
@@ -375,9 +383,7 @@ class GitBackend:
 
     def commit_diff(self, sha: str, *paths: str) -> str:
         """Patch introduced by `sha`, optionally limited to `paths`."""
-        return self.run(
-            "show", "-M", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", sha, "--", *paths
-        )
+        return self.run("show", "-M", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", sha, "--", *paths)
 
     def _commit_base(self, commit: Commit) -> str:
         """What a commit is compared with: its first parent (so merges show what they brought in), or nothing."""
@@ -421,8 +427,15 @@ class GitBackend:
         paths = [p for p in (file.old_path, file.path) if p]
         return decode_lossless(
             self.run_bytes(
-                "diff", "-M", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/",
-                self._commit_base(commit), commit.sha, "--", *paths,
+                "diff",
+                "-M",
+                "--no-ext-diff",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+                self._commit_base(commit),
+                commit.sha,
+                "--",
+                *paths,
             )
         )
 
@@ -509,7 +522,9 @@ class GitBackend:
         """
         self.run("apply", "--reverse", "--recount", "--whitespace=nowarn", "-", input=encode_lossless(patch))
 
-    def change_counts(self) -> tuple[dict[str, tuple[int | None, int | None]], dict[str, tuple[int | None, int | None]]]:
+    def change_counts(
+        self,
+    ) -> tuple[dict[str, tuple[int | None, int | None]], dict[str, tuple[int | None, int | None]]]:
         """Lines added/removed per path: (unstaged, staged). Binary files count as (None, None)."""
 
         def parse(out: str) -> dict[str, tuple[int | None, int | None]]:
@@ -584,7 +599,9 @@ class GitBackend:
     def pull(self) -> Iterator[str]:
         return self.run_progress("pull", "--progress")
 
-    def push(self, remote: str | None = None, branch: str | None = None, force_with_lease: bool = False) -> Iterator[str]:
+    def push(
+        self, remote: str | None = None, branch: str | None = None, force_with_lease: bool = False
+    ) -> Iterator[str]:
         """Push the current branch; sets the upstream when it has none."""
         args = ["push", "--progress"]
         if force_with_lease:
@@ -711,13 +728,17 @@ class GitBackend:
         conflicts = self.conflicted_paths()
         if conflicts:
             return conflicts
-        raise GitError(["stash", "apply", ref], proc.returncode, (proc.stdout + proc.stderr).decode("utf-8", errors="replace"))
+        raise GitError(
+            ["stash", "apply", ref], proc.returncode, (proc.stdout + proc.stderr).decode("utf-8", errors="replace")
+        )
 
     def stash_drop(self, ref: str) -> None:
         self.run("stash", "drop", "-q", ref)
 
     def stash_diff(self, ref: str) -> str:
-        return self.run("stash", "show", "-p", "--include-untracked", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", ref)
+        return self.run(
+            "stash", "show", "-p", "--include-untracked", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", ref
+        )
 
     # ------------------------------------------------------------------ operations in progress
 
@@ -864,7 +885,9 @@ class GitBackend:
     def reflog(self, ref: str | None = None, max_count: int = 50) -> list[ReflogEntry]:
         """Where `ref` (default: the current branch, else HEAD) has pointed, newest first."""
         ref = ref or self.current_branch() or "HEAD"
-        proc = self.run_raw("reflog", "show", f"--max-count={max_count}", f"--format=%H{US}%gd{US}%gs{US}%ct", ref, "--")
+        proc = self.run_raw(
+            "reflog", "show", f"--max-count={max_count}", f"--format=%H{US}%gd{US}%gs{US}%ct", ref, "--"
+        )
         if proc.returncode != 0:
             return []
         entries: list[ReflogEntry] = []

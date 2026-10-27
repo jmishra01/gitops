@@ -179,7 +179,10 @@ class ChangesView(QWidget):
         self.more_btn = QToolButton(text="···")
         self.more_btn.setProperty("variant", "ghost")
         self.more_btn.setAccessibleName("More file actions")
-        self.more_btn.clicked.connect(lambda: self.current and self._context_menu([self.current], self.more_btn.mapToGlobal(self.more_btn.rect().bottomLeft())))
+        self.more_btn.clicked.connect(
+            lambda: self.current
+            and self._context_menu([self.current], self.more_btn.mapToGlobal(self.more_btn.rect().bottomLeft()))
+        )
         header = QFrame(objectName="DiffHeader")
         header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         header_row = QHBoxLayout(header)
@@ -408,7 +411,9 @@ class ChangesView(QWidget):
                         body = handle.read(self.backend.PREVIEW_BYTES).decode("utf-8", errors="replace")
                 else:
                     body = "(deleted on one side)"
-                self._show_text(f"Both branches changed this file. Press Resolve conflicts… to pick what to keep.\n\n{body}")
+                self._show_text(
+                    f"Both branches changed this file. Press Resolve conflicts… to pick what to keep.\n\n{body}"
+                )
                 return
             if untracked:
                 self._show_text(self.backend.untracked_preview(row.path))
@@ -595,7 +600,9 @@ class ChangesView(QWidget):
                 self.composer.set_message(self.merge_message)
             text = f"<b>Merging</b> · {subject}<br>{left}commit to finish the merge."
         elif self.operation:
-            name = {"rebase": "Rewriting history (rebase)", "cherry-pick": "Cherry-picking", "revert": "Reverting"}[self.operation]
+            name = {"rebase": "Rewriting history (rebase)", "cherry-pick": "Cherry-picking", "revert": "Reverting"}[
+                self.operation
+            ]
             text = f"<b>{name}</b> stopped on a conflict.<br>{left}press Continue."
         else:
             text = f"<b>{len(self.conflicts)} conflicted file(s)</b> from applying a stash. Resolve them to continue."
@@ -693,7 +700,9 @@ class ChangesView(QWidget):
             if not self.unstaged_paths():
                 self._status("Nothing to commit")
                 return
-            answer = QMessageBox.question(self, "Nothing staged", "Nothing is staged. Stage all changes and commit them?")
+            answer = QMessageBox.question(
+                self, "Nothing staged", "Nothing is staged. Stage all changes and commit them?"
+            )
             if answer != QMessageBox.StandardButton.Yes:
                 return
             if not self._run(lambda b: b.stage_all(), emit=False):

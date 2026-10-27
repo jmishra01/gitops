@@ -55,8 +55,12 @@ def tip_line(b: Branch) -> str:
 
 
 def build_sections(
-    branches: list[Branch], tags: list[Tag], worktrees: list[Worktree], submodules: list[Submodule],
-    root: Path | None, query: str = "",
+    branches: list[Branch],
+    tags: list[Tag],
+    worktrees: list[Worktree],
+    submodules: list[Submodule],
+    root: Path | None,
+    query: str = "",
 ) -> list[tuple[str, list[Row]]]:
     q = query.lower().strip()
 
@@ -76,28 +80,77 @@ def build_sections(
             )
         else:
             chip, chip_kind = tracking_chip(b)
-            local.append(Row(f"local:{b.name}", "local", b.name, tip_line(b), chip, chip_kind, "branch", b.is_current, b))
+            local.append(
+                Row(f"local:{b.name}", "local", b.name, tip_line(b), chip, chip_kind, "branch", b.is_current, b)
+            )
     local.sort(key=lambda r: (not r.current, r.title.lower()))
     sections = [("Local branches", local)]
     sections += [(f"Remote · {name}", rows) for name, rows in sorted(remote_groups.items())]
-    sections.append(("Tags", [
-        Row(f"tag:{t.name}", "tag", t.name, t.message or ("Annotated tag" if t.annotated else "Lightweight tag"),
-            t.target_sha[:7], icon="tag", data=t)
-        for t in tags if keep(t.name, t.message)
-    ]))
+    sections.append(
+        (
+            "Tags",
+            [
+                Row(
+                    f"tag:{t.name}",
+                    "tag",
+                    t.name,
+                    t.message or ("Annotated tag" if t.annotated else "Lightweight tag"),
+                    t.target_sha[:7],
+                    icon="tag",
+                    data=t,
+                )
+                for t in tags
+                if keep(t.name, t.message)
+            ],
+        )
+    )
     if len(worktrees) > 1:
         rows = []
         for wt in worktrees:
             here = root is not None and Path(wt.path) == root
-            chip, kind = ("This window", "accent") if here else ("Main", "muted") if wt.is_main else ("Locked", "warning") if wt.locked else ("", "muted")
+            chip, kind = (
+                ("This window", "accent")
+                if here
+                else ("Main", "muted")
+                if wt.is_main
+                else ("Locked", "warning")
+                if wt.locked
+                else ("", "muted")
+            )
             if keep(wt.branch or "", wt.path):
-                rows.append(Row(f"worktree:{wt.path}", "worktree", wt.branch or "detached HEAD", wt.path, chip, kind, "folder", here, wt))
+                rows.append(
+                    Row(
+                        f"worktree:{wt.path}",
+                        "worktree",
+                        wt.branch or "detached HEAD",
+                        wt.path,
+                        chip,
+                        kind,
+                        "folder",
+                        here,
+                        wt,
+                    )
+                )
         sections.append(("Worktrees", rows))
-    sections.append(("Submodules", [
-        Row(f"submodule:{s.path}", "submodule", s.path, f"{s.sha[:7]} {s.describe}".strip(),
-            "OK" if s.state == "ok" else s.state.capitalize(), "success" if s.state == "ok" else "warning", "folder", data=s)
-        for s in submodules if keep(s.path)
-    ]))
+    sections.append(
+        (
+            "Submodules",
+            [
+                Row(
+                    f"submodule:{s.path}",
+                    "submodule",
+                    s.path,
+                    f"{s.sha[:7]} {s.describe}".strip(),
+                    "OK" if s.state == "ok" else s.state.capitalize(),
+                    "success" if s.state == "ok" else "warning",
+                    "folder",
+                    data=s,
+                )
+                for s in submodules
+                if keep(s.path)
+            ],
+        )
+    )
     return sections
 
 
@@ -106,17 +159,36 @@ def actions_for(row: Row, current: str | None, remotes: list[str], root: Path | 
         b: Branch = row.data
         out = []
         if row.kind == "remote":
-            out.append(Action("checkout_remote", "Check out as local branch", "primary", tip="Create a local branch that tracks this one"))
+            out.append(
+                Action(
+                    "checkout_remote",
+                    "Check out as local branch",
+                    "primary",
+                    tip="Create a local branch that tracks this one",
+                )
+            )
         elif not b.is_current:
             out.append(Action("checkout", f"Switch to {b.name}", "primary"))
         if current and not b.is_current:
             out.append(Action("merge", f"Merge into {current}…", tip=f"Bring the commits of {b.name} into {current}"))
-            out.append(Action("rebase", f"Rebase {current} onto this", tip=f"Replay {current}'s own commits on top of {b.name}"))
+            out.append(
+                Action(
+                    "rebase", f"Rebase {current} onto this", tip=f"Replay {current}'s own commits on top of {b.name}"
+                )
+            )
         out.append(Action("new_branch", "New branch from here…"))
         out.append(Action("show", "Show in history"))
         if row.kind == "local":
             out.append(Action("rename", "Rename…"))
-            out.append(Action("delete", "Delete…", "danger", not b.is_current, "You can't delete the branch you're on" if b.is_current else ""))
+            out.append(
+                Action(
+                    "delete",
+                    "Delete…",
+                    "danger",
+                    not b.is_current,
+                    "You can't delete the branch you're on" if b.is_current else "",
+                )
+            )
         return out
     if row.kind == "tag":
         return [
@@ -130,8 +202,13 @@ def actions_for(row: Row, current: str | None, remotes: list[str], root: Path | 
         here = root is not None and Path(wt.path) == root
         return [
             Action("open", "Open in this window", "primary", not here),
-            Action("remove_worktree", "Remove…", "danger", not wt.is_main and not here,
-                   "The main worktree and the open one can't be removed" if wt.is_main or here else ""),
+            Action(
+                "remove_worktree",
+                "Remove…",
+                "danger",
+                not wt.is_main and not here,
+                "The main worktree and the open one can't be removed" if wt.is_main or here else "",
+            ),
         ]
     if row.kind == "submodule":
         return [Action("open", "Open submodule", "primary"), Action("update_submodules", "Update all submodules")]
@@ -225,8 +302,15 @@ class BranchesView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(split)
 
-    def set_data(self, root: Path | None, branches: list[Branch], remotes: list[str], tags: list[Tag],
-                 worktrees: list[Worktree], submodules: list[Submodule]) -> None:
+    def set_data(
+        self,
+        root: Path | None,
+        branches: list[Branch],
+        remotes: list[str],
+        tags: list[Tag],
+        worktrees: list[Worktree],
+        submodules: list[Submodule],
+    ) -> None:
         self.root, self.remotes = root, list(remotes)
         self.current = next((b.name for b in branches if b.is_current), None)
         self._data = (branches, tags, worktrees, submodules)
@@ -284,7 +368,11 @@ class BranchesView(QWidget):
             return ("Annotated tag" if t.annotated else "Lightweight tag") + f" on {t.target_sha[:7]}", t.message
         if row.kind == "worktree":
             wt: Worktree = row.data
-            flags = [f for f, on in (("main worktree", wt.is_main), ("locked", wt.locked), ("missing on disk", wt.prunable)) if on]
+            flags = [
+                f
+                for f, on in (("main worktree", wt.is_main), ("locked", wt.locked), ("missing on disk", wt.prunable))
+                if on
+            ]
             return (f"Worktree at {wt.path}" + (f" · {', '.join(flags)}" if flags else "")), f"HEAD {wt.head[:7]}"
         if row.kind == "submodule":
             s: Submodule = row.data

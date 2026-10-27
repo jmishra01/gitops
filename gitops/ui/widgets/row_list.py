@@ -86,7 +86,9 @@ class RowDelegate(QStyledItemDelegate):
 
         x = r.left() + 12
         if row.icon:
-            painter.drawPixmap(x, r.top() + 10, icons.pixmap(row.icon, c.primary if row.current else c.text_secondary, 16))
+            painter.drawPixmap(
+                x, r.top() + 10, icons.pixmap(row.icon, c.primary if row.current else c.text_secondary, 16)
+            )
             x += 26
 
         right = r.right() - 12
@@ -109,7 +111,9 @@ class RowDelegate(QStyledItemDelegate):
         title_font.setWeight(QFont.Weight.DemiBold if row.current else QFont.Weight.Medium)
         painter.setFont(title_font)
         width = max(right - x, 20)
-        title = painter.fontMetrics().elidedText(("● " if row.current else "") + row.title, Qt.TextElideMode.ElideMiddle, width)
+        title = painter.fontMetrics().elidedText(
+            ("● " if row.current else "") + row.title, Qt.TextElideMode.ElideMiddle, width
+        )
         painter.setPen(QColor(c.text))
         painter.drawText(QRect(x, r.top() + 8, width, 22), int(Qt.AlignmentFlag.AlignVCenter), title)
         if row.subtitle:

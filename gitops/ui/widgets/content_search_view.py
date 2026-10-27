@@ -62,7 +62,9 @@ class ResultDelegate(QStyledItemDelegate):
                 painter.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
             selected = option.state & QStyle.StateFlag.State_Selected
             painter.setPen(QColor(c.text if column in (2, 3) or selected else c.text_secondary))
-            align = Qt.AlignmentFlag.AlignVCenter | (Qt.AlignmentFlag.AlignRight if column == 5 else Qt.AlignmentFlag.AlignLeft)
+            align = Qt.AlignmentFlag.AlignVCenter | (
+                Qt.AlignmentFlag.AlignRight if column == 5 else Qt.AlignmentFlag.AlignLeft
+            )
             mode = Qt.TextElideMode.ElideMiddle if column == 3 else Qt.TextElideMode.ElideRight
             painter.drawText(rect, int(align), painter.fontMetrics().elidedText(text, mode, rect.width()))
         painter.restore()
@@ -150,7 +152,9 @@ class ContentSearchView(QWidget):
         header = self.table.horizontalHeader()
         header.hide()  # chips, SHAs, paths and times read fine without column titles
         for column, width in ((0, 96), (1, 86), (3, 220), (4, 130), (5, 90)):
-            header.setSectionResizeMode(column, header.ResizeMode.Interactive if column == 3 else header.ResizeMode.Fixed)
+            header.setSectionResizeMode(
+                column, header.ResizeMode.Interactive if column == 3 else header.ResizeMode.Fixed
+            )
             self.table.setColumnWidth(column, width)
         self.table.selectionModel().currentRowChanged.connect(self._on_row)
         self.table.doubleClicked.connect(lambda idx: self.open_file_history.emit(self.hits[idx.row()].path))
@@ -248,14 +252,16 @@ class ContentSearchView(QWidget):
     def _append(self, batch: list[SearchHit]) -> None:
         for hit in batch:
             self.hits.append(hit)
-            self.model.appendRow([
-                kind_item(hit.kind),
-                item(hit.commit.short_sha, tooltip=f"{hit.commit.sha}\n{hit.commit.subject}"),
-                item(hit.preview, tooltip=hit.commit.subject),
-                item(hit.path),
-                item(hit.commit.author, tooltip=hit.commit.email),
-                item(relative_time(hit.commit.date), tooltip=hit.commit.date.strftime("%Y-%m-%d %H:%M")),
-            ])
+            self.model.appendRow(
+                [
+                    kind_item(hit.kind),
+                    item(hit.commit.short_sha, tooltip=f"{hit.commit.sha}\n{hit.commit.subject}"),
+                    item(hit.preview, tooltip=hit.commit.subject),
+                    item(hit.path),
+                    item(hit.commit.author, tooltip=hit.commit.email),
+                    item(relative_time(hit.commit.date), tooltip=hit.commit.date.strftime("%Y-%m-%d %H:%M")),
+                ]
+            )
         if self.table.currentIndex().row() < 0 and self.hits:
             self.table.selectRow(0)
         self.summary.setText(f"Searching history… {len(self.hits)} matches so far")
@@ -281,8 +287,12 @@ class ContentSearchView(QWidget):
         if s.first_added:
             parts.append(f"first added {s.first_added.commit.short_sha} ({relative_time(s.first_added.commit.date)})")
         if s.last_removed:
-            parts.append(f"last removed {s.last_removed.commit.short_sha} ({relative_time(s.last_removed.commit.date)})")
-        self.summary.setText(" · ".join(parts) if self.hits or s.present_now else "No commit ever added or removed this text.")
+            parts.append(
+                f"last removed {s.last_removed.commit.short_sha} ({relative_time(s.last_removed.commit.date)})"
+            )
+        self.summary.setText(
+            " · ".join(parts) if self.hits or s.present_now else "No commit ever added or removed this text."
+        )
 
     def _on_row(self, current, _previous) -> None:
         if not current.isValid() or not self.backend or not self.opts:
