@@ -6,7 +6,6 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtGui import QTextCursor  # noqa: E402
 
 from gitops.core import ChangeKind  # noqa: E402
 from gitops.ui.main_window import MainWindow  # noqa: E402
@@ -59,44 +58,41 @@ def test_content_search_view(window, qtbot):
     qtbot.waitUntil(lambda: "basic_auth" in view.diff.toPlainText(), timeout=5000)
 
 
-def select_diff_line(diff_view, needle):
-    doc = diff_view.document()
-    block = doc.begin()
-    while block.isValid():
-        if block.text() == needle:
-            cursor = QTextCursor(block)
-            diff_view.setTextCursor(cursor)
-            return
-        block = block.next()
-    raise AssertionError(f"{needle!r} not in diff")
+def tick_line(changes, raw):
+    """Tick one diff line's checkbox, as a click in the gutter does."""
+    index = changes.hunks.find_line(raw)
+    assert index is not None, f"{raw!r} not in diff"
+    changes.hunks.set_line(index, True)
 
 
 def test_stage_selected_line_and_commit(window, repo, qtbot):
     repo.write("auth.py", "def oauth(user):\n    return token\nEXTRA = 1\n")
     window._refresh_status()
     changes = window.changes
-    assert changes.unstaged.count() == 1
-    assert window.tabs.tabText(0) == "Changes (1)"
+    assert changes.unstaged_paths() == ["auth.py"]
+    assert window.rail.badge_text() == "1"
 
-    changes.unstaged.setCurrentRow(0)
-    select_diff_line(changes.diff, "+EXTRA = 1")
-    changes.apply_lines()
+    assert changes.select_file("auth.py", staged=False)
+    tick_line(changes, "+EXTRA = 1")
+    assert not changes.selection_bar.isHidden() and "1 line selected" in changes.selection_label.text()
+    changes.apply_selected_lines()
 
-    assert changes.staged.count() == 1 and changes.unstaged.count() == 1
+    assert changes.staged_paths() == ["auth.py"] and changes.unstaged_paths() == ["auth.py"]
     assert repo.git("show", ":auth.py") == "def oauth(user):\n    pass\nEXTRA = 1\n"
+    assert changes.composer.button.text() == "Commit 1 file to main"
 
-    changes.message.setPlainText("Add EXTRA constant")
+    changes.composer.summary.setText("Add EXTRA constant")
     changes.commit()
     qtbot.waitUntil(lambda: window.history.model.rowCount() == 4, timeout=5000)
     assert window.history.model.item(0, 1).text() == "Add EXTRA constant"
-    assert changes.staged.count() == 0 and changes.unstaged.count() == 1
+    assert changes.staged_paths() == [] and changes.unstaged_paths() == ["auth.py"]
 
 
 def test_create_branch_shows_in_sidebar(window, qtbot):
     window.backend.create_branch("feature/x")
     window.refresh()
     qtbot.waitUntil(lambda: window.sidebar.topLevelItem(0).childCount() == 2, timeout=5000)
-    qtbot.waitUntil(lambda: "feature/x" in window.branch_label.text(), timeout=5000)
+    qtbot.waitUntil(lambda: "feature/x" in window.top_bar.branch_button.text(), timeout=5000)
 
 
 def test_push_through_network_runner(window, tmp_path, qtbot):
@@ -104,9 +100,11 @@ def test_push_through_network_runner(window, tmp_path, qtbot):
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
     window.backend.run("remote", "add", "origin", str(bare))
 
-    window.push_act.trigger()
+    window._refresh_status()
+    assert window.top_bar.sync_state.action == "publish"  # no upstream yet
+    window.top_bar.sync_requested.emit()  # what clicking Sync does
     qtbot.waitUntil(lambda: window.network_task is None and window.push_act.isEnabled(), timeout=10000)
-    qtbot.waitUntil(lambda: "↑0 ↓0" in window.branch_label.text(), timeout=5000)
+    qtbot.waitUntil(lambda: window.top_bar.sync_button.text() == "Up to date", timeout=5000)
 
 
 # ---------------------------------------------------------------- v0.2 flows
@@ -128,8 +126,9 @@ def test_merge_conflict_resolved_in_editor(window, repo, qtbot):
     changes = window.changes
     assert changes.banner.isVisibleTo(window) and "Merging" in changes.banner_label.text()
     assert changes.conflicts == ["auth.py"]
-    assert changes.unstaged.item(0).text().startswith("U")
-    assert "Merge branch 'feature'" in changes.message.toPlainText()
+    assert [r.letter for r in changes.files.rows()] == ["U"]
+    assert "Merge branch 'feature'" in changes.composer.summary.text()
+    assert changes.composer.button.text() == "Commit merge"
 
     editor = ConflictEditor(window.backend, "auth.py", window)
     assert "Conflict 1 of 1" in editor.counter.text()
@@ -220,9 +219,10 @@ def test_history_pages_in_more_commits(window, repo, qtbot, monkeypatch):
 
 def test_commit_subject_hint(window):
     changes = window.changes
-    changes.message.setPlainText("x" * 80 + "\nnot blank")
-    assert "80/72" in changes.message_hint.text()
-    assert "subject is long" in changes.message_hint.text() and "line 2 blank" in changes.message_hint.text()
+    changes.composer.summary.setText("x" * 80)
+    assert "80 / 72" in changes.composer.counter.text() and "shorter" in changes.composer.counter.text()
+    changes.composer.description.setPlainText("Body text")
+    assert changes.composer.message() == "x" * 80 + "\n\nBody text"
 
 
 def test_history_filter(window, qtbot):
@@ -299,7 +299,7 @@ def test_command_palette_matching_and_run(window, qtbot):
     assert palette.list.count() >= 1
     assert "Search history" in palette.list.item(0).text()
     palette._run_current()
-    assert window.tabs.currentWidget() is window.content_search
+    assert window.current_page() is window.content_search
 
 
 def test_git_console_logs_writes_not_reads(window, repo):
@@ -390,7 +390,7 @@ def test_ignore_untracked_from_changes(window, repo):
     window._refresh_status()
     window.changes._ignore(["*.log"])
     assert (repo.path / ".gitignore").read_text() == "*.log\n"
-    assert [window.changes.unstaged.item(r).data(0x0100) for r in range(window.changes.unstaged.count())] == [".gitignore"]
+    assert window.changes.unstaged_paths() == [".gitignore"]
 
 
 def test_worktree_section_in_sidebar(window, tmp_path, qtbot):
@@ -479,8 +479,8 @@ def test_changes_view_stages_line_in_latin1_file(window, repo):
     (repo.path / "l.txt").write_bytes(b"caf\xe9 = 1\nLINE2\nextra\n")
     window._refresh_status()
     changes = window.changes
-    changes.unstaged.setCurrentRow(0)
-    assert "café = 1" in changes.diff.toPlainText()
-    select_diff_line(changes.diff, "+extra")
-    changes.apply_lines()
+    changes.select_file("l.txt", staged=False)
+    assert "café = 1" in changes.current_text()
+    tick_line(changes, "+extra")
+    changes.apply_selected_lines()
     assert window.backend.run_bytes("show", ":l.txt") == b"caf\xe9 = 1\nline2\nextra\n"

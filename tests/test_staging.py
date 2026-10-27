@@ -144,3 +144,30 @@ def test_stage_and_unstage_in_repo_without_commits(repo):
     assert backend.status()[0].index == "A"
     backend.unstage("a.txt")
     assert backend.status()[0].index == "?"
+
+
+def test_change_counts(repo, backend):
+    repo.write("f.txt", text(changed(l1="ONE", l2="TWO")))
+    repo.write("g.txt", "new\nfile\n")
+    backend.stage("g.txt")
+    unstaged, staged = backend.change_counts()
+    assert unstaged == {"f.txt": (2, 2)}
+    assert staged == {"g.txt": (2, 0)}
+
+
+def test_change_counts_before_first_commit(tmp_path):
+    from gitops.core import GitBackend as GB
+
+    b = GB.init(tmp_path / "empty")
+    (tmp_path / "empty" / "a.txt").write_text("x\ny\n")
+    b.stage("a.txt")
+    assert b.change_counts() == ({}, {"a.txt": (2, 0)})
+
+
+def test_discard_selected_lines_only(repo, backend):
+    repo.write("f.txt", text(changed(l5="FIVE", l6="SIX")))
+    patch = parse_file_patch(backend.file_diff("f.txt", staged=False))
+    pick = {i for i, line in patch.hunks[0].lines if line in ("-line 6", "+SIX")}
+    backend.discard_from_worktree(build_partial_patch(patch, pick, reverse=True))
+    assert (repo.path / "f.txt").read_text() == text(changed(l5="FIVE"))
+    assert index_content(backend) == text(ORIGINAL)  # the index is untouched

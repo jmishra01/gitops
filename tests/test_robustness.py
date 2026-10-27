@@ -111,3 +111,13 @@ def test_add_ignore_rule_keeps_latin1_and_crlf(repo, backend):
     (repo.path / ".gitignore").write_bytes(original)
     backend.add_ignore_rule("build/")
     assert (repo.path / ".gitignore").read_bytes() == original + b"build/\r\n"
+
+
+def test_status_never_rewrites_the_index(repo, backend):
+    """Background refreshes must not take index.lock (it would break the user's terminal git)."""
+    index = repo.path / ".git" / "index"
+    os.utime(repo.path / "a.txt")  # same content, new mtime: plain `git status` would refresh the index
+    before = index.stat().st_mtime_ns
+    backend.status()
+    backend.change_counts()
+    assert index.stat().st_mtime_ns == before

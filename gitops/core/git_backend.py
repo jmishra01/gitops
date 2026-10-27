@@ -35,7 +35,10 @@ COMMIT_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%D%x1f%s"
 RS = "\x1e"
 US = "\x1f"
 
-_BASE_ARGS = ("-c", "core.quotepath=off", "-c", "color.ui=never")
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree object
+# --no-optional-locks: our background refreshes (status, diff) must never take .git/index.lock,
+# or a git command the user runs in a terminal at the same moment fails with "index.lock exists".
+_BASE_ARGS = ("--no-optional-locks", "-c", "core.quotepath=off", "-c", "color.ui=never")
 # Network commands must never block on a terminal prompt the GUI can't answer.
 _NETWORK_ENV = {"GIT_TERMINAL_PROMPT": "0"}
 
@@ -415,6 +418,36 @@ class GitBackend:
         if reverse:
             args.append("--reverse")
         self.run(*args, "-", input=encode_lossless(patch))
+
+    def discard_from_worktree(self, patch: str) -> None:
+        """Throw away just the changes in `patch` from the working tree. Irreversible: confirm first.
+
+        `patch` must be built against the working tree (build_partial_patch with
+        reverse=True on an index-to-worktree diff) and is applied in reverse.
+        """
+        self.run("apply", "--reverse", "--recount", "--whitespace=nowarn", "-", input=encode_lossless(patch))
+
+    def change_counts(self) -> tuple[dict[str, tuple[int | None, int | None]], dict[str, tuple[int | None, int | None]]]:
+        """Lines added/removed per path: (unstaged, staged). Binary files count as (None, None)."""
+
+        def parse(out: str) -> dict[str, tuple[int | None, int | None]]:
+            counts: dict[str, tuple[int | None, int | None]] = {}
+            for record in out.split("\0"):
+                if not record:
+                    continue
+                parts = record.split("\t", 2)
+                if len(parts) < 3:
+                    continue
+                added, removed, path = parts
+                counts[path] = (int(added) if added != "-" else None, int(removed) if removed != "-" else None)
+            return counts
+
+        base = ["diff", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv"]
+        unstaged = parse(self.run(*base))
+        # Before the first commit there's no HEAD, so compare the index with git's empty tree.
+        against = [] if self.has_commits() else [EMPTY_TREE]
+        staged = parse(self.run(*base, "--cached", *against))
+        return unstaged, staged
 
     def discard(self, *paths: str) -> None:
         """Throw away unstaged changes to tracked files. Irreversible: confirm in the UI first."""

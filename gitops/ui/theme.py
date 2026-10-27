@@ -38,6 +38,30 @@ class Colors:
     marker_bg: str
     age: tuple[str, ...]  # blame tints, newest first
     uncommitted_bg: str
+    # Workbench surfaces and controls (the redesign)
+    window: str
+    surface: str
+    surface_alt: str
+    border: str
+    border_strong: str
+    text: str
+    text_secondary: str
+    primary: str  # filled primary buttons (white text on it)
+    primary_hover: str
+    accent_soft: str  # selected rows, active nav item
+    accent_soft_border: str
+    accent_on_soft: str
+    success_soft: str
+    success_on_soft: str
+    warning_soft: str
+    warning_on_soft: str
+    danger_soft: str
+    danger_on_soft: str
+    danger_border: str
+    hunk_header_bg: str
+    field_bg: str  # search field
+    toast_bg: str
+    toast_fg: str
 
 
 LIGHT = Colors(
@@ -45,7 +69,7 @@ LIGHT = Colors(
     success="#1a7f37",
     warning="#9a6700",
     danger="#cf222e",
-    accent="#0969da",
+    accent="#2F5BEA",
     muted="#6e7781",
     add_fg="#1a7f37",
     add_bg="#e6ffec",
@@ -62,6 +86,29 @@ LIGHT = Colors(
     marker_bg="#eaeef2",
     age=("#fff1e5", "#fff7ef", "#fffaf5", "#fdfdfd"),
     uncommitted_bg="#dafbe1",
+    window="#F6F7F9",
+    surface="#FFFFFF",
+    surface_alt="#FBFBFC",
+    border="#E3E6EA",
+    border_strong="#C9CED6",
+    text="#16181D",
+    text_secondary="#5B6370",
+    primary="#2F5BEA",
+    primary_hover="#2449C8",
+    accent_soft="#EEF2FE",
+    accent_soft_border="#C9D5FB",
+    accent_on_soft="#1F3FB5",
+    success_soft="#E7F6EC",
+    success_on_soft="#116329",
+    warning_soft="#FFF4D6",
+    warning_on_soft="#7A4A00",
+    danger_soft="#FDECEA",
+    danger_on_soft="#B42318",
+    danger_border="#F3C4BF",
+    hunk_header_bg="#F6F7FB",
+    field_bg="#F1F3F5",
+    toast_bg="#16181D",
+    toast_fg="#FFFFFF",
 )
 
 DARK = Colors(
@@ -86,6 +133,29 @@ DARK = Colors(
     marker_bg="#30363d",
     age=("#3b2410", "#2f2112", "#251d15", "#1e1e1e"),
     uncommitted_bg="#12301d",
+    window="#0E1116",
+    surface="#161B22",
+    surface_alt="#12161C",
+    border="#262C36",
+    border_strong="#3A4250",
+    text="#E6EDF3",
+    text_secondary="#9AA4B2",
+    primary="#3D6DF2",
+    primary_hover="#5580F5",
+    accent_soft="#1B2A4A",
+    accent_soft_border="#2E4A86",
+    accent_on_soft="#A8C1FF",
+    success_soft="#12301D",
+    success_on_soft="#7EE2A0",
+    warning_soft="#3A2C0B",
+    warning_on_soft="#F2C66D",
+    danger_soft="#3B1519",
+    danger_on_soft="#FF9B95",
+    danger_border="#7A2A2F",
+    hunk_header_bg="#1C2128",
+    field_bg="#0D1117",
+    toast_bg="#E6EDF3",
+    toast_fg="#0E1116",
 )
 
 _mode = "system"
@@ -157,6 +227,104 @@ def _palette(dark: bool) -> QPalette:
     return p
 
 
+def stylesheet(c: Colors) -> str:
+    """Styles for the workbench components, selected by objectName or a `variant` property.
+
+    Scoped this way so widgets that don't opt in keep the plain Fusion look.
+    """
+    return f"""
+    #AppBody, #ChangesPage {{ background: {c.window}; }}
+    #TopBar {{ background: {c.surface}; border-bottom: 1px solid {c.border}; }}
+    #NavRail {{ background: {c.surface}; border-right: 1px solid {c.border}; }}
+    #Panel {{ background: {c.surface}; }}
+    #PanelDivider {{ background: {c.border}; }}
+    #Composer {{ background: {c.surface_alt}; border-top: 1px solid {c.border}; }}
+    #DiffHeader {{ background: {c.surface}; border-bottom: 1px solid {c.border}; }}
+    #SectionLabel {{ color: {c.text_secondary}; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }}
+    #Muted {{ color: {c.text_secondary}; }}
+    #Title {{ font-size: 15px; font-weight: 600; color: {c.text}; }}
+    #FileTitle {{ font-size: 13px; font-weight: 600; color: {c.text}; }}
+
+    QToolButton#RailButton {{
+        border: none; border-radius: 10px; padding: 6px 0px; color: {c.text_secondary};
+        font-size: 11px; background: transparent;
+    }}
+    QToolButton#RailButton:hover {{ background: {c.field_bg}; }}
+    QToolButton#RailButton:checked {{ background: {c.accent_soft}; color: {c.accent_on_soft}; font-weight: 600; }}
+    QLabel#RailBadge {{
+        background: {c.primary}; color: #FFFFFF; border-radius: 9px; font-size: 11px; font-weight: 600;
+        padding: 0px 5px;
+    }}
+
+    QPushButton[variant="primary"] {{
+        background: {c.primary}; color: #FFFFFF; border: none; border-radius: 8px;
+        padding: 0px 14px; min-height: 34px; font-weight: 600;
+    }}
+    QPushButton[variant="primary"]:hover {{ background: {c.primary_hover}; }}
+    QPushButton[variant="primary"]:disabled {{ background: {c.border_strong}; color: {c.surface}; }}
+    QPushButton[variant="secondary"], QToolButton[variant="secondary"] {{
+        background: {c.surface}; color: {c.text}; border: 1px solid {c.border_strong}; border-radius: 8px;
+        padding: 0px 12px; min-height: 30px; font-weight: 500;
+    }}
+    QPushButton[variant="secondary"]:hover, QToolButton[variant="secondary"]:hover {{ background: {c.field_bg}; }}
+    QPushButton[variant="danger"] {{
+        background: {c.surface}; color: {c.danger_on_soft}; border: 1px solid {c.danger_border}; border-radius: 8px;
+        padding: 0px 12px; min-height: 30px; font-weight: 500;
+    }}
+    QPushButton[variant="danger"]:hover {{ background: {c.danger_soft}; }}
+    QToolButton[variant="ghost"] {{
+        background: transparent; color: {c.text_secondary}; border: none; border-radius: 8px; padding: 6px;
+    }}
+    QToolButton[variant="ghost"]:hover {{ background: {c.field_bg}; color: {c.text}; }}
+    QToolButton[variant="ghost"]::menu-indicator {{ image: none; width: 0px; }}
+    QToolButton[variant="ghost"]:checked {{ background: {c.accent_soft}; }}
+    QToolButton[variant="pill"] {{
+        background: {c.surface}; color: {c.text}; border: 1px solid {c.border}; border-radius: 8px;
+        padding: 0px 10px; min-height: 32px;
+    }}
+    QToolButton[variant="pill"]:hover {{ background: {c.field_bg}; }}
+    QToolButton[variant="pill"]::menu-indicator {{ image: none; width: 0px; }}
+    QToolButton[variant="pill"]::menu-button {{
+        border: none; border-left: 1px solid {c.border}; width: 22px;
+        border-top-right-radius: 8px; border-bottom-right-radius: 8px;
+    }}
+    QToolButton[variant="sync"] {{
+        background: {c.primary}; color: #FFFFFF; border: none; border-radius: 8px;
+        padding: 0px 14px; min-height: 34px; font-weight: 600;
+    }}
+    QToolButton[variant="sync"]:hover {{ background: {c.primary_hover}; }}
+    QToolButton[variant="sync"]::menu-button {{ border-left: 1px solid rgba(255,255,255,0.35); width: 26px; }}
+
+    QLineEdit#SearchField {{
+        background: {c.field_bg}; border: 1px solid transparent; border-radius: 8px; padding: 0px 10px;
+        min-height: 32px; color: {c.text};
+    }}
+    QLineEdit#SearchField:focus {{ border: 1px solid {c.accent_soft_border}; background: {c.surface}; }}
+    #Composer QLineEdit, #Composer QPlainTextEdit {{
+        background: {c.surface}; border: 1px solid {c.border_strong}; border-radius: 8px; padding: 6px 8px;
+        color: {c.text};
+    }}
+    #Composer QLineEdit {{ min-height: 22px; }}
+    #Composer QLineEdit:focus, #Composer QPlainTextEdit:focus {{ border: 1px solid {c.primary}; }}
+
+    #HunkCard {{ background: {c.surface}; border: 1px solid {c.border}; border-radius: 10px; }}
+    #HunkHeader {{ background: {c.hunk_header_bg}; border-bottom: 1px solid {c.border};
+        border-top-left-radius: 10px; border-top-right-radius: 10px; }}
+    #HunkHeaderText {{ color: {c.hunk}; }}
+    #DiffScroll, #DiffCanvas {{ background: {c.window}; border: none; }}
+    #EmptyState {{ color: {c.text_secondary}; font-size: 14px; }}
+    #SelectionBar {{ background: {c.toast_bg}; border-radius: 12px; }}
+    #SelectionBar QLabel {{ color: {c.toast_fg}; font-weight: 500; }}
+    #SelectionBar QPushButton {{
+        background: transparent; color: {c.toast_fg}; border: 1px solid {c.text_secondary}; border-radius: 8px;
+        padding: 0px 12px; min-height: 30px;
+    }}
+    #SelectionBar QPushButton[variant="primary"] {{ background: {c.primary}; color: #FFFFFF; border: none; }}
+    #Banner {{ background: {c.banner_bg}; border: 1px solid {c.banner_border}; border-radius: 8px; }}
+    #Banner QLabel {{ color: {c.banner_fg}; border: none; background: transparent; }}
+    """
+
+
 def apply(new_mode: str = "system") -> None:
     """Switch theme and refresh every widget that paints theme colors itself."""
     global _mode
@@ -166,6 +334,7 @@ def apply(new_mode: str = "system") -> None:
         return
     app.setStyle("Fusion")  # renders the same on every platform and honours the palette fully
     app.setPalette(_palette(is_dark()))
+    app.setStyleSheet(stylesheet(colors()))
     for widget in app.allWidgets():
         refresh = getattr(widget, "apply_theme", None)
         if callable(refresh):

@@ -14,10 +14,13 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QHBoxLayout,
     QSplitter,
-    QTabWidget,
+    QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from gitops.core.git_backend import GitBackend, GitError
@@ -38,6 +41,8 @@ from gitops.ui.widgets.changes_view import ChangesView
 from gitops.ui.widgets.content_search_view import ContentSearchView
 from gitops.ui.widgets.file_history_view import FileHistoryView
 from gitops.ui.widgets.history_view import HistoryView
+from gitops.ui.widgets.nav_rail import NavRail
+from gitops.ui.widgets.top_bar import SyncState, TopBar
 
 BRANCH_ROLE = Qt.ItemDataRole.UserRole  # (name, is_remote, is_current)
 TAG_ROLE = Qt.ItemDataRole.UserRole + 1  # Tag
@@ -80,29 +85,54 @@ class MainWindow(QMainWindow):
         self.file_history.open_blame.connect(self._open_blame)
         self.changes.open_blame.connect(self._open_blame)
 
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self.changes, "Changes")
-        self.tabs.addTab(self.history, "History")
-        self.tabs.addTab(self.file_history, "File history")
-        self.tabs.addTab(self.blame, "Blame")
-        self.tabs.addTab(self.content_search, "Search history")
+        # Pages, switched by the nav rail. The branch sidebar shows everywhere except Changes,
+        # where the top bar's branch switcher covers it and the file list needs the room.
+        self.pages = QStackedWidget()
+        self.page_keys = {
+            "changes": self.changes, "history": self.history, "files": self.file_history,
+            "blame": self.blame, "search": self.content_search,
+        }
+        for widget in self.page_keys.values():
+            self.pages.addWidget(widget)
 
-        split = QSplitter(objectName="main_split")
-        split.addWidget(self.sidebar)
-        split.addWidget(self.tabs)
-        split.setStretchFactor(1, 1)
-        split.setSizes([220, 1060])
-        self.setCentralWidget(split)
+        self.top_bar = TopBar()
+        self.top_bar.sync_requested.connect(self._sync)
+        self.top_bar.search_requested.connect(self._open_palette)
+        self.top_bar.repo_menu.aboutToShow.connect(self._fill_repo_menu)
+        self.top_bar.branch_menu.aboutToShow.connect(self._fill_branch_menu)
+        self.top_bar.undo_button.clicked.connect(self._open_undo)
+        self.rail = NavRail()
+        self.rail.page_selected.connect(lambda key: self.show_page(self.page_keys[key]))
+        self.rail.dashboard_requested.connect(self._open_dashboard)
+        self.changes.count_changed.connect(self._set_change_count)
+
+        self.main_split = QSplitter(objectName="main_split")
+        self.main_split.addWidget(self.sidebar)
+        self.main_split.addWidget(self.pages)
+        self.main_split.setStretchFactor(1, 1)
+        self.main_split.setSizes([220, 1060])
+        body = QWidget(objectName="AppBody")
+        body.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        row.addWidget(self.rail)
+        row.addWidget(self.main_split, 1)
+        column = QVBoxLayout(body)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addWidget(self.top_bar)
+        column.addLayout(row, 1)
+        self.setCentralWidget(body)
 
         self.progress_label = QLabel()
-        self.branch_label = QLabel()
         self.cancel_network_btn = QPushButton("Cancel")
         self.cancel_network_btn.setFlat(True)
         self.cancel_network_btn.hide()
         self.cancel_network_btn.clicked.connect(self._cancel_network)
         self.statusBar().addWidget(self.progress_label, 1)
         self.statusBar().addWidget(self.cancel_network_btn)
-        self.statusBar().addPermanentWidget(self.branch_label)
+        self.show_page(self.changes)
 
         self.dashboard: DashboardWindow | None = None
         self.console = GitConsole()
@@ -112,6 +142,8 @@ class MainWindow(QMainWindow):
         self.console_dock.hide()
 
         self._build_actions()
+        self.top_bar.console_button.toggled.connect(self.console_dock.setVisible)
+        self.console_dock.visibilityChanged.connect(self.top_bar.console_button.setChecked)
         self._set_repo_actions_enabled(False)
         self._restore_layout()
 
@@ -143,7 +175,7 @@ class MainWindow(QMainWindow):
         self.branch_act = self._action("New branch…", lambda: self._new_branch("HEAD"), "Ctrl+Shift+B")
         self.stash_act = self._action("Stash…", self._stash_save, "Ctrl+Shift+S", "Save your changes and clean the working tree")
         self.file_history_act = self._action(
-            "File history", lambda: self.tabs.setCurrentWidget(self.file_history), "Ctrl+Shift+H"
+            "File history", lambda: self.show_page(self.file_history), "Ctrl+Shift+H"
         )
         self.search_act = self._action("Search history", self._focus_search, "Ctrl+Shift+F")
         self.undo_act = self._action("Undo…", self._open_undo, "Ctrl+Alt+Z", "Restore the branch to an earlier point")
@@ -184,14 +216,11 @@ class MainWindow(QMainWindow):
             group.addAction(act)
             theme_menu.addAction(act)
 
-        toolbar = self.addToolBar("Main")
-        toolbar.setObjectName("main_toolbar")
-        toolbar.setMovable(False)
-        toolbar.addActions([self.open_act, self.clone_act])
-        toolbar.addSeparator()
-        toolbar.addActions([self.fetch_act, self.pull_act, self.push_act, self.branch_act, self.stash_act, self.refresh_act])
-        toolbar.addSeparator()
-        toolbar.addActions([self.file_history_act, self.search_act])
+        # The top bar replaces the old toolbar; everything stays in the menus and the command palette.
+        self.top_bar.sync_menu.addActions([self.fetch_act, self.pull_act, self.push_act])
+        settings = self.top_bar.settings_menu
+        settings.addMenu(theme_menu)
+        settings.addActions([self.palette_act, self.console_act, self.gitignore_act])
 
     def _set_repo_actions_enabled(self, enabled: bool) -> None:
         for action in self.repo_actions:
@@ -246,6 +275,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("last_repo", root)
         self.settings.setValue("recent_repos", ([root] + [p for p in self._recent() if p != root])[:MAX_RECENT])
         self.setWindowTitle(f"GitOps — {backend.root.name}")
+        self.top_bar.set_repo(backend.root.name)
         self.statusBar().clearMessage()
         self._set_repo_actions_enabled(True)
         backend.command_listeners.append(self.console.listener)
@@ -282,7 +312,11 @@ class MainWindow(QMainWindow):
         if not self.backend:
             return
         self._set_change_count(self.changes.refresh())
-        self._set_branch_label((self.backend.current_branch(), self.backend.ahead_behind()))
+        self._set_branch_label(self._branch_info(self.backend))
+
+    @staticmethod
+    def _branch_info(backend: GitBackend) -> tuple[str | None, tuple[int, int] | None, bool]:
+        return backend.current_branch(), backend.ahead_behind(), bool(backend.remotes())
 
     def _refresh_status_async(self) -> None:
         """Same as _refresh_status, but every git call runs on a worker thread."""
@@ -290,17 +324,32 @@ class MainWindow(QMainWindow):
             return
         self.changes.refresh_async(self.runner, self._set_change_count)
         backend = self.backend
-        task = Task(lambda: (backend.current_branch(), backend.ahead_behind()))
+        task = Task(self._branch_info, backend)
         task.signals.result.connect(lambda info, b=backend: b is self.backend and self._set_branch_label(info))
         self.runner.submit(task)
 
     def _set_change_count(self, count: int) -> None:
-        self.tabs.setTabText(0, f"Changes ({count})" if count else "Changes")
+        self.rail.set_badge(count)
 
     def _set_branch_label(self, info) -> None:
-        branch, ab = info
-        sync = f"  ↑{ab[0]} ↓{ab[1]}" if ab else "  (no upstream)"
-        self.branch_label.setText(f"  {branch or 'detached HEAD'}{sync}  ")
+        branch, ab, has_remote = info
+        self.top_bar.set_branch(branch)
+        self.top_bar.set_sync(SyncState.from_repo(has_remote, ab, branch), self._sync_busy_label())
+
+    def _sync_busy_label(self) -> str | None:
+        return "Syncing…" if self.network_task is not None else None
+
+    # ------------------------------------------------------------------ pages
+
+    def show_page(self, widget: QWidget) -> None:
+        self.pages.setCurrentWidget(widget)
+        key = next((k for k, w in self.page_keys.items() if w is widget), None)
+        if key:
+            self.rail.select(key)
+        self.sidebar.setVisible(widget is not self.changes)
+
+    def current_page(self) -> QWidget:
+        return self.pages.currentWidget()
 
     def _populate(self, backend: GitBackend, data) -> None:
         if backend is not self.backend:
@@ -530,6 +579,7 @@ class MainWindow(QMainWindow):
         task.signals.finished.connect(lambda: self._network_done(title, errors, on_success, task.cancelled))
         self.network_task = self.runner.submit(task)
         self.cancel_network_btn.show()
+        self.top_bar.set_sync(self.top_bar.sync_state, "Syncing…")
 
     def _cancel_network(self) -> None:
         if self.network_task:
@@ -540,6 +590,7 @@ class MainWindow(QMainWindow):
         self.network_task = None
         self.progress_label.clear()
         self.cancel_network_btn.hide()
+        self.top_bar.set_sync(self.top_bar.sync_state)
         self.clone_act.setEnabled(True)
         for action in (self.fetch_act, self.pull_act, self.push_act):
             action.setEnabled(self.backend is not None)
@@ -575,11 +626,11 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ misc
 
     def _open_file_history(self, path: str) -> None:
-        self.tabs.setCurrentWidget(self.file_history)
+        self.show_page(self.file_history)
         self.file_history.show_file(path)
 
     def _focus_search(self) -> None:
-        self.tabs.setCurrentWidget(self.content_search)
+        self.show_page(self.content_search)
         self.content_search.query.setFocus()
         self.content_search.query.selectAll()
 
@@ -613,7 +664,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ tags and history
 
     def _show_in_history(self, sha: str) -> None:
-        self.tabs.setCurrentWidget(self.history)
+        self.show_page(self.history)
         if not self.history.select_sha(sha):
             self.statusBar().showMessage("That commit isn't loaded; try All branches", 4000)
 
@@ -672,7 +723,7 @@ class MainWindow(QMainWindow):
         if not self._git(lambda b: conflicts.extend(fn(b))):
             return
         if conflicts:
-            self.tabs.setCurrentWidget(self.changes)
+            self.show_page(self.changes)
             QMessageBox.information(
                 self,
                 "Conflicts",
@@ -724,7 +775,7 @@ class MainWindow(QMainWindow):
         self._stoppable_op("History rewritten", lambda b: run_interactive_rebase(b, base, chosen))
 
     def _open_blame(self, path: str, rev: str | None) -> None:
-        self.tabs.setCurrentWidget(self.blame)
+        self.show_page(self.blame)
         self.blame.blame(path, rev)
 
     # ------------------------------------------------------------------ stash
@@ -765,7 +816,7 @@ class MainWindow(QMainWindow):
         if not self._git(lambda b: conflicts.extend(b.stash_apply(stash.ref, pop=pop))):
             return
         if conflicts:
-            self.tabs.setCurrentWidget(self.changes)
+            self.show_page(self.changes)
             QMessageBox.information(
                 self,
                 "Stash applied with conflicts",
@@ -804,7 +855,7 @@ class MainWindow(QMainWindow):
         if not self._git(lambda b: conflicts.extend(b.merge(name, no_ff=no_ff.isChecked()))):
             return
         if conflicts:
-            self.tabs.setCurrentWidget(self.changes)
+            self.show_page(self.changes)
             QMessageBox.information(
                 self,
                 "Merge conflicts",
@@ -841,11 +892,12 @@ class MainWindow(QMainWindow):
                 walk(top.menu(), top.text().replace("&", "") + " › ")
         return found
 
-    def _open_palette(self) -> None:
+    def _open_palette(self, text: str = "") -> None:
         palette = CommandPalette(self._palette_actions(), self)
-        geometry = self.geometry()
-        palette.move(geometry.center().x() - 260, geometry.top() + 80)
+        anchor = self.top_bar.search.mapToGlobal(self.top_bar.search.rect().bottomLeft())
+        palette.move(anchor.x(), anchor.y() + 4)
         palette.show()
+        palette.query.setText(text if isinstance(text, str) else "")
         palette.query.setFocus()
 
     def _open_undo(self) -> None:
@@ -928,3 +980,63 @@ class MainWindow(QMainWindow):
         if self.backend and GitignoreDialog(self.backend, self).exec():
             self.statusBar().showMessage(".gitignore saved", 4000)
             self.refresh()
+
+    # ------------------------------------------------------------------ top bar
+
+    def _sync(self) -> None:
+        if not self.backend:
+            self._choose_repo()
+            return
+        action = self.top_bar.sync_state.action
+        if action == "none":
+            QMessageBox.information(
+                self, "No remote", "This repository has no remote yet. Add one with `git remote add origin <url>`."
+            )
+        elif action == "fetch":
+            self._network("Fetching", lambda b: b.fetch())
+        elif action == "pull":
+            self._network("Pulling", lambda b: b.pull())
+        elif action in ("push", "publish"):
+            self._network("Pushing", lambda b: b.push())
+        elif action == "sync":
+
+            def pull_then_push(b: GitBackend):
+                yield from b.pull()
+                yield from b.push()
+
+            self._network("Syncing", pull_then_push)
+
+    def _fill_repo_menu(self) -> None:
+        menu = self.top_bar.repo_menu
+        menu.clear()
+        current = str(self.backend.root) if self.backend else None
+        recent = [p for p in self._recent() if Path(p).is_dir()]
+        if recent:
+            menu.addSection("Recent")
+            for path in recent:
+                act = menu.addAction(Path(path).name, lambda p=path: self.open_repo(p))
+                act.setToolTip(path)
+                act.setCheckable(True)
+                act.setChecked(path == current)
+        menu.addSeparator()
+        menu.addActions([self.open_act, self.clone_act, self.init_act, self.dashboard_act])
+
+    def _fill_branch_menu(self) -> None:
+        menu = self.top_bar.branch_menu
+        menu.clear()
+        if not self.backend:
+            menu.addAction("Open a repository first").setEnabled(False)
+            return
+        try:
+            branches = [b for b in self.backend.branches() if not b.is_remote]
+        except GitError:
+            branches = []
+        menu.addSection("Switch branch")
+        for b in branches:
+            act = menu.addAction(b.name, lambda n=b.name: self._checkout(n, False))
+            act.setCheckable(True)
+            act.setChecked(b.is_current)
+            act.setEnabled(not b.is_current)
+        menu.addSeparator()
+        menu.addAction(self.branch_act)
+        menu.addAction("All branches…", lambda: self.show_page(self.history))
