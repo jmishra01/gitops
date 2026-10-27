@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFontDatabase
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtGui import QBrush, QColor
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QSplitter, QVBoxLayout, QWidget
 
 from gitops.core.git_backend import GitBackend
 from gitops.core.models import BlameLine
@@ -10,6 +10,7 @@ from gitops.services.task_runner import Task, TaskRunner
 from gitops.ui.theme import colors
 from gitops.ui.widgets.common import item, make_table, relative_time
 from gitops.ui.widgets.diff_view import DiffView
+from gitops.ui.widgets.hunk_view import mono_font
 
 
 
@@ -32,16 +33,25 @@ class BlameView(QWidget):
         go = QPushButton("Blame")
         go.setDefault(True)
         go.clicked.connect(lambda: self.blame(self.path_edit.text().strip(), None))
-        bar = QHBoxLayout()
+        self.bar = QWidget()
+        bar = QHBoxLayout(self.bar)
+        bar.setContentsMargins(0, 0, 0, 0)
         bar.addWidget(QLabel("File"))
         bar.addWidget(self.path_edit, 1)
         bar.addWidget(self.rev_label)
         bar.addWidget(go)
 
         self.table, self.model = make_table(["Commit", "Author", "When", "Line", "Code"], 4)
-        self.table.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.table.verticalHeader().setDefaultSectionSize(20)
+        self.table.setObjectName("CommitTable")
+        self.table.setFont(mono_font(self.table.font()))
+        self.table.verticalHeader().setDefaultSectionSize(22)
         self.table.setAlternatingRowColors(False)
+        self.table.setFrameShape(QFrame.Shape.NoFrame)
+        self.table.horizontalHeader().hide()
+        header = self.table.horizontalHeader()
+        for column, width in ((0, 86), (1, 140), (2, 96), (3, 52)):
+            header.setSectionResizeMode(column, header.ResizeMode.Fixed)
+            self.table.setColumnWidth(column, width)
         self.table.selectionModel().currentRowChanged.connect(self._on_row)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._menu)
@@ -51,9 +61,16 @@ class BlameView(QWidget):
         split.addWidget(self.table)
         split.addWidget(self.diff)
         split.setSizes([460, 240])
+        split.setHandleWidth(1)
         layout = QVBoxLayout(self)
-        layout.addLayout(bar)
+        layout.addWidget(self.bar)
         layout.addWidget(split, 1)
+
+    def set_embedded(self, embedded: bool) -> None:
+        """Inside the file inspector the file is picked by its header, so hide our own picker."""
+        self.bar.setVisible(not embedded)
+        if embedded:
+            self.layout().setContentsMargins(0, 0, 0, 0)
 
     def set_backend(self, backend: GitBackend | None) -> None:
         self.backend = backend

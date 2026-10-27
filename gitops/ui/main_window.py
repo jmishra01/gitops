@@ -36,10 +36,9 @@ from gitops.ui.dialogs.undo_dialog import UndoDialog
 from gitops.ui.widgets.git_console import GitConsole
 from gitops.ui.dialogs.rebase_dialog import RebaseDialog
 from gitops.ui.dialogs.stash_dialogs import StashSaveDialog, StashViewDialog
-from gitops.ui.widgets.blame_view import BlameView
 from gitops.ui.widgets.changes_view import ChangesView
 from gitops.ui.widgets.content_search_view import ContentSearchView
-from gitops.ui.widgets.file_history_view import FileHistoryView
+from gitops.ui.widgets.file_inspector import FileInspector
 from gitops.ui.widgets.history_view import HistoryView
 from gitops.ui.widgets.nav_rail import NavRail
 from gitops.ui.widgets.top_bar import SyncState, TopBar
@@ -80,23 +79,29 @@ class MainWindow(QMainWindow):
         self.history.details.action_requested.connect(self._commit_action)
         self.history.details.open_file_history.connect(self._open_file_history)
         self.history.details.open_blame.connect(self._open_blame)
-        self.blame = BlameView(self.runner)
+        # The file inspector holds both a file's history (timeline + A/B compare) and its blame.
+        self.inspector = FileInspector(self.runner)
+        self.file_history = self.inspector
+        self.blame = self.inspector.blame
         self.blame.show_commit.connect(self._show_in_history)
-        self.file_history = FileHistoryView(self.runner)
+        self.inspector.open_commit.connect(self._show_in_history)
+        self.inspector.back_requested.connect(self._go_back)
+        self.inspector.search_requested.connect(self._search_in_file)
+        self.inspector.changed.connect(self.refresh)
+        self._previous_page: QWidget | None = None
         self.content_search = ContentSearchView(self.runner)
         for view in (self.changes, self.content_search):
             view.open_file_history.connect(self._open_file_history)
-        self.file_history.open_blame.connect(self._open_blame)
         self.changes.open_blame.connect(self._open_blame)
 
         # Pages, switched by the nav rail. The branch sidebar shows everywhere except Changes,
         # where the top bar's branch switcher covers it and the file list needs the room.
         self.pages = QStackedWidget()
         self.page_keys = {
-            "changes": self.changes, "history": self.history, "files": self.file_history,
-            "blame": self.blame, "search": self.content_search,
+            "changes": self.changes, "history": self.history, "files": self.inspector,
+            "blame": self.inspector, "search": self.content_search,
         }
-        for widget in self.page_keys.values():
+        for widget in dict.fromkeys(self.page_keys.values()):
             self.pages.addWidget(widget)
 
         self.top_bar = TopBar()
@@ -106,7 +111,7 @@ class MainWindow(QMainWindow):
         self.top_bar.branch_menu.aboutToShow.connect(self._fill_branch_menu)
         self.top_bar.undo_button.clicked.connect(self._open_undo)
         self.rail = NavRail()
-        self.rail.page_selected.connect(lambda key: self.show_page(self.page_keys[key]))
+        self.rail.page_selected.connect(self._rail_selected)
         self.rail.dashboard_requested.connect(self._open_dashboard)
         self.changes.count_changed.connect(self._set_change_count)
 
@@ -286,7 +291,6 @@ class MainWindow(QMainWindow):
         self.history.set_backend(backend)
         self.file_history.set_backend(backend)
         self.content_search.set_backend(backend)
-        self.blame.set_backend(backend)
         self.changes.set_backend(backend)
         self.refresh()
 
@@ -346,11 +350,14 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ pages
 
     def show_page(self, widget: QWidget) -> None:
+        if widget is not self.pages.currentWidget():
+            self._previous_page = self.pages.currentWidget()
         self.pages.setCurrentWidget(widget)
         key = next((k for k, w in self.page_keys.items() if w is widget), None)
         if key:
             self.rail.select(key)
-        self.sidebar.setVisible(widget is not self.changes)
+        # Branches, tags and stashes matter when browsing history; single-file and staging pages need the room.
+        self.sidebar.setVisible(widget in (self.history, self.content_search))
 
     def current_page(self) -> QWidget:
         return self.pages.currentWidget()
@@ -630,8 +637,23 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ misc
 
     def _open_file_history(self, path: str) -> None:
-        self.show_page(self.file_history)
-        self.file_history.show_file(path)
+        self.show_page(self.inspector)
+        self.inspector.show_file(path)
+
+    def _rail_selected(self, key: str) -> None:
+        self.show_page(self.page_keys[key])
+        if key in ("files", "blame"):
+            self.inspector.show_tab("blame" if key == "blame" else "history")
+            self.rail.select(key)
+
+    def _go_back(self) -> None:
+        target = self._previous_page if self._previous_page not in (None, self.inspector) else self.changes
+        self.show_page(target)
+
+    def _search_in_file(self, path: str) -> None:
+        self.show_page(self.content_search)
+        self.content_search.paths.setText(path)
+        self.content_search.query.setFocus()
 
     def _focus_search(self) -> None:
         self.show_page(self.content_search)
@@ -779,8 +801,9 @@ class MainWindow(QMainWindow):
         self._stoppable_op("History rewritten", lambda b: run_interactive_rebase(b, base, chosen))
 
     def _open_blame(self, path: str, rev: str | None) -> None:
-        self.show_page(self.blame)
-        self.blame.blame(path, rev)
+        self.show_page(self.inspector)
+        self.inspector.show_blame(path, rev)
+        self.rail.select("blame")
 
     # ------------------------------------------------------------------ stash
 

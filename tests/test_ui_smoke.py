@@ -42,9 +42,10 @@ def test_history_graph_and_sidebar(window, qtbot):
 
 def test_file_history_view(window, qtbot):
     window.file_history.show_file("auth.py")
-    qtbot.waitUntil(lambda: window.file_history.model.rowCount() == 3, timeout=5000)
-    kinds = [window.file_history.model.item(r, 0).text() for r in range(3)]
-    assert kinds == [ChangeKind.MODIFIED.value, ChangeKind.RENAMED.value, ChangeKind.CREATED.value]
+    qtbot.waitUntil(lambda: window.file_history.model.rowCount() == 4, timeout=5000)
+    kinds = [v.kind for v in window.file_history.versions]
+    assert kinds == ["Working copy", ChangeKind.MODIFIED.value, ChangeKind.RENAMED.value, ChangeKind.CREATED.value]
+    assert window.file_history.versions[0].subject == "Same as the last commit"
 
 
 def test_content_search_view(window, qtbot):
@@ -165,24 +166,21 @@ def test_stash_shows_in_sidebar_and_applies(window, repo, qtbot):
 
 def test_file_history_compare_and_working_copy(window, repo, qtbot):
     view = window.file_history
-    view.show_file("auth.py")
-    qtbot.waitUntil(lambda: view.model.rowCount() == 3, timeout=5000)
-    assert view.timeline.isEnabled() and view.timeline.value() == 2
-
-    view.timeline.setValue(0)  # oldest version
-    assert view.table.currentIndex().row() == 2
     repo.write("auth.py", "working copy\n")
-    view._diff_vs_working()
-    qtbot.waitUntil(lambda: "+working copy" in view.diff.toPlainText(), timeout=5000)
-    assert "-def basic_auth(user):" in view.diff.toPlainText()
+    view.show_file("auth.py")
+    qtbot.waitUntil(lambda: view.model.rowCount() == 4, timeout=5000)
+    assert (view.a, view.b) == (1, 0)  # last commit vs working copy
+    qtbot.waitUntil(lambda: "working copy" in view.compare_text(), timeout=5000)
+    assert "def oauth(user):" in view.compare_text()
 
-    sel = view.table.selectionModel()
-    view.table.selectRow(0)
-    sel.select(view.model.index(2, 0), sel.SelectionFlag.Select | sel.SelectionFlag.Rows)
-    assert view.compare_btn.isEnabled()
-    view._compare_selected()
-    qtbot.waitUntil(lambda: "+def oauth(user):" in view.diff.toPlainText(), timeout=5000)
-    assert "login.py @" in view.diff.toPlainText() and "auth.py @" in view.diff.toPlainText()
+    view.timeline.set_a(3)  # the oldest version, chosen on the timeline
+    assert view.a == 3
+    qtbot.waitUntil(lambda: "def basic_auth(user):" in view.compare_text(), timeout=5000)
+    assert view.chip_a.text().startswith("A · ") and view.chip_b.text() == "B · Working copy"
+    assert view.head_a.text().startswith("A · login.py at ")  # the name it had back then
+
+    view.swap()
+    assert (view.a, view.b) == (0, 3) and view.timeline.a == 0
 
 
 def test_search_at_commit_and_dates(window, qtbot):

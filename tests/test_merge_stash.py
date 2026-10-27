@@ -214,3 +214,21 @@ def test_unified_diff_variants():
     assert "-two" in text and "+TWO" in text and "No newline" in text
     assert "--- /dev/null" in unified_diff(None, b"x\n", "a", "b")
     assert "Binary" in unified_diff(b"\0", b"\1", "a", "b")
+
+
+def test_align_side_by_side():
+    from gitops.core.compare import align, lines_of
+
+    rows = align(["a", "b", "c", "d"], ["a", "B", "c", "e", "f"])
+    assert [(r.kind, r.left_no, r.right_no) for r in rows] == [
+        ("equal", 1, 1),
+        ("replace", 2, 2),
+        ("equal", 3, 3),
+        ("replace", 4, 4),
+        ("replace", None, 5),  # padded: the right side has one more line
+    ]
+    only_new = align([], ["x"])
+    assert [(r.kind, r.left_no, r.right) for r in only_new] == [("insert", None, "x")]
+    assert [r.kind for r in align(["x"], [])] == ["delete"]
+    assert lines_of(b"a\r\nb\n") == ["a", "b"] and lines_of(b"a\nb") == ["a", "b"] and lines_of(None) == []
+    assert lines_of(b"caf\xe9\n") == ["café"]

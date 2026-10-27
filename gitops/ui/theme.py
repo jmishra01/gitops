@@ -311,6 +311,7 @@ def stylesheet(c: Colors) -> str:
         background: {c.surface}; color: {c.text}; font-weight: 600; border: 1px solid {c.border};
     }}
     QTableView#CommitTable {{ background: {c.surface}; border: none; }}
+    QTableView#CommitTable::item:selected {{ background: {c.accent_soft}; color: {c.text}; }}
     QLineEdit#SearchField {{
         background: {c.field_bg}; border: 1px solid transparent; border-radius: 8px; padding: 0px 10px;
         min-height: 32px; color: {c.text};

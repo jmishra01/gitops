@@ -402,6 +402,9 @@ class GitBackend:
             )
         )
 
+    def tracked_files(self) -> list[str]:
+        return [p for p in self.run("ls-files", "-z").split("\0") if p]
+
     def commit_message(self, sha: str) -> str:
         return self.run("log", "-1", "--format=%B", sha).strip()
 
