@@ -100,7 +100,7 @@ def test_blame_a_version_from_the_versions_menu(window, qtbot):
 def test_back_and_search_navigation(window, qtbot):
     window.show_page(window.history)
     ins = open_file(window, qtbot)
-    ins.search_tab.click()
+    ins.search_act.trigger()
     assert window.current_page() is window.content_search
     assert window.content_search.paths.text() == "src/auth.py"
     window._open_file_history("src/auth.py")

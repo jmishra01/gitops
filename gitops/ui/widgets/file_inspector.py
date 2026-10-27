@@ -12,7 +12,6 @@ from pathlib import Path, PurePosixPath
 from PySide6.QtCore import QModelIndex, QRect, QSize, QStringListModel, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QCompleter,
     QDialog,
     QFileDialog,
@@ -318,40 +317,26 @@ class FileInspector(QWidget):
         self.picker.returnPressed.connect(lambda: self.open_file(self.picker.text().strip()))
         self.completer.activated.connect(lambda text: self.open_file(text))
 
-        segmented = QFrame(objectName="Segmented")
-        segmented.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        seg = QHBoxLayout(segmented)
-        seg.setContentsMargins(2, 2, 2, 2)
-        seg.setSpacing(2)
-        self.tab_group = QButtonGroup(self)
-        self.history_tab = QPushButton("History")
-        self.blame_tab = QPushButton("Blame")
-        for button in (self.history_tab, self.blame_tab):
-            button.setCheckable(True)
-            self.tab_group.addButton(button)
-        self.search_tab = QPushButton("Search text")
-        self.search_tab.setToolTip("Find text in every past version of this file")
-        self.search_tab.clicked.connect(lambda: self.path and self.search_requested.emit(self.path))
-        for button in (self.history_tab, self.blame_tab, self.search_tab):
-            button.setProperty("variant", "segment")
-            button.setMinimumWidth(button.fontMetrics().horizontalAdvance(button.text()) + 30)
-            seg.addWidget(button)
-        self.history_tab.setChecked(True)
-        self.history_tab.clicked.connect(lambda: self.show_tab("history"))
-        self.blame_tab.clicked.connect(lambda: self.show_tab("blame"))
+        # Which page is showing ("history" or "blame"); the nav rail switches between them.
+        self.tab = "history"
 
         self.options = QToolButton(text="···")
         self.options.setProperty("variant", "secondary")
-        self.options.setAccessibleName("History options")
+        self.options.setAccessibleName("File options")
         self.options.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         options_menu = QMenu(self.options)
+        self.search_act = options_menu.addAction("Search this file's history…")
+        self.search_act.setToolTip("Find text in every past version of this file")
+        self.search_act.setEnabled(False)
+        self.search_act.triggered.connect(lambda: self.path and self.search_requested.emit(self.path))
+        options_menu.addSeparator()
         self.follow_act = options_menu.addAction("Follow renames")
         self.follow_act.setCheckable(True)
         self.follow_act.setChecked(True)
         self.all_refs_act = options_menu.addAction("Include all branches")
         self.all_refs_act.setCheckable(True)
         for act in (self.follow_act, self.all_refs_act):
-            act.toggled.connect(lambda _on: self.path and self.show_file(self.path))
+            act.toggled.connect(lambda _on: self.path and self.show_file(self.path, tab=self.tab))
         self.options.setMenu(options_menu)
 
         header = QFrame(objectName="DiffHeader")
@@ -362,7 +347,6 @@ class FileInspector(QWidget):
         hl.addWidget(self.back_btn)
         hl.addLayout(titles, 1)
         hl.addWidget(self.picker, 1)
-        hl.addWidget(segmented)
         hl.addWidget(self.options)
 
         # ---- History tab: timeline, versions, compare
@@ -504,7 +488,7 @@ class FileInspector(QWidget):
         self.pages.setCurrentWidget(self.empty)
         self.blame.set_backend(backend)
         self.empty.set_files([])
-        self.search_tab.setEnabled(False)
+        self.search_act.setEnabled(False)
         if backend:
             task = Task(backend.tracked_files)
             task.signals.result.connect(lambda files, b=backend: b is self.backend and self._set_files(files))
@@ -537,26 +521,25 @@ class FileInspector(QWidget):
     def show_tab(self, tab: str) -> None:
         if not self.path:
             # No file yet: remember which tab was asked for and let the user pick a file.
-            (self.blame_tab if tab == "blame" else self.history_tab).setChecked(True)
+            self.tab = tab
             self.title.setText("Blame" if tab == "blame" else "File inspector")
             self.empty.set_purpose(tab)
             self.pages.setCurrentWidget(self.empty)
             self.empty.focus_search()
             return
+        self.tab = tab
         if tab == "blame":
-            self.blame_tab.setChecked(True)
             self.pages.setCurrentWidget(self.blame)
             if self.blame.path_edit.text() != self.path or not self.blame.lines:
                 self.blame.blame(self.path, None)
         else:
-            self.history_tab.setChecked(True)
             self.pages.setCurrentWidget(self.history_page)
 
     def open_file(self, path: str) -> None:
         """Open a file picked in the finder or header, staying on the tab the user is on."""
         if not path:
             return
-        tab = "blame" if self.blame_tab.isChecked() else "history"
+        tab = self.tab
         self.show_file(path, tab=tab)
         if tab == "blame":
             self.show_tab("blame")
@@ -564,7 +547,7 @@ class FileInspector(QWidget):
     def show_blame(self, path: str, rev: str | None) -> None:
         if path != self.path:
             self.show_file(path, tab="blame")
-        self.blame_tab.setChecked(True)
+        self.tab = "blame"
         self.pages.setCurrentWidget(self.blame)
         self.blame.blame(path, rev)
 
@@ -579,7 +562,7 @@ class FileInspector(QWidget):
         self.title.setText(name)
         self.subtitle.setText(self.path)
         self.subtitle.show()
-        self.search_tab.setEnabled(True)
+        self.search_act.setEnabled(True)
         self.summary.setText("Loading history…")
         self.model.clear()
         self.versions = []
@@ -597,11 +580,10 @@ class FileInspector(QWidget):
         task.signals.result.connect(self._loaded)
         task.signals.error.connect(lambda msg: self.summary.setText(f"Couldn't load this file's history: {msg}"))
         self.runner.submit(task)
+        self.tab = tab
         if tab == "blame":
-            self.blame_tab.setChecked(True)
             self.pages.setCurrentWidget(self.blame)
         else:
-            self.history_tab.setChecked(True)
             self.pages.setCurrentWidget(self.history_page)
 
     def _loaded(self, result) -> None:
