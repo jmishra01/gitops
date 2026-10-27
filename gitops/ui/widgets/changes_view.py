@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gitops.core.encoding import display_text
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import FileStatus
 from gitops.core.patch import FilePatch, build_partial_patch, parse_file_patch
@@ -267,7 +268,7 @@ class ChangesView(QWidget):
         except (GitError, OSError) as exc:
             text, self.patch = f"Couldn't show this file: {exc}", None
         self.file_label.setText(f"{'Staged' if staged else 'Unstaged'} · {path}")
-        self.diff.show_diff(text)
+        self.diff.show_diff(display_text(text))  # same lines as the patch, so selections still map
         self.diff.verticalScrollBar().setValue(scroll)
         self._update_buttons()
 

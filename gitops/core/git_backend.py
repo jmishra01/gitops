@@ -15,6 +15,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
+from gitops.core.encoding import decode_lossless, encode_lossless
 from gitops.core.models import (
     BlameLine,
     Branch,
@@ -292,12 +293,14 @@ class GitBackend:
         """Diff of one file: index vs worktree, or HEAD vs index when `staged`.
 
         Prefixes and textconv are pinned so the output can be fed back to
-        `git apply` for hunk and line staging.
+        `git apply` for hunk and line staging. The text is decoded losslessly
+        (see gitops.core.encoding), so non-UTF-8 files round-trip byte for byte;
+        pass it through `display_text` before showing it in Qt.
         """
         args = ["diff", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"]
         if staged:
             args.append("--cached")
-        return self.run(*args, "--", path)
+        return decode_lossless(self.run_bytes(*args, "--", path))
 
     def untracked_preview(self, path: str) -> str:
         data = (self.root / path).read_bytes()
@@ -329,7 +332,7 @@ class GitBackend:
         args = ["apply", "--cached", "--recount", "--whitespace=nowarn"]
         if reverse:
             args.append("--reverse")
-        self.run(*args, "-", input=patch.encode())
+        self.run(*args, "-", input=encode_lossless(patch))
 
     def discard(self, *paths: str) -> None:
         """Throw away unstaged changes to tracked files. Irreversible: confirm in the UI first."""

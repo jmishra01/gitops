@@ -405,3 +405,82 @@ def test_worktree_section_in_sidebar(window, tmp_path, qtbot):
     qtbot.waitUntil(lambda: section() is not None, timeout=5000)
     assert section().childCount() == 2
     assert "(this one)" in section().child(0).text(0)
+
+
+# ---------------------------------------------------------------- non-UTF-8 files
+
+
+@pytest.fixture
+def latin1_conflict(window, repo):
+    (repo.path / "l.txt").write_bytes(b"caf\xe9 = 1\nline2\n")
+    repo.commit("latin1 base")
+    repo.git("switch", "-q", "-c", "side")
+    (repo.path / "l.txt").write_bytes(b"caf\xe9 = 1\nside\n")
+    repo.commit("side")
+    repo.git("switch", "-q", "main")
+    (repo.path / "l.txt").write_bytes(b"caf\xe9 = 1\nmain\n")
+    repo.commit("main")
+    assert window.backend.merge("side") == ["l.txt"]
+    return repo
+
+
+def test_conflict_editor_keeps_latin1_bytes(window, latin1_conflict):
+    from gitops.core.conflicts import Choice
+    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+
+    editor = ConflictEditor(window.backend, "l.txt", window)
+    assert editor.encoding == "latin-1" and editor.encoding_notice.isVisibleTo(editor)
+    assert "café = 1" in editor.result.toPlainText()  # readable, not a replacement character
+    editor._resolve_all(Choice.THEIRS)
+    editor._mark_resolved()
+    assert (latin1_conflict.path / "l.txt").read_bytes() == b"caf\xe9 = 1\nside\n"
+    assert window.backend.conflicted_paths() == []
+
+
+def test_conflict_editor_refuses_unencodable_text(window, latin1_conflict, monkeypatch):
+    from gitops.core.conflicts import Choice
+    from gitops.ui.dialogs import conflict_editor
+    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+
+    warnings = []
+    monkeypatch.setattr(conflict_editor.QMessageBox, "warning", lambda *a, **k: warnings.append(a[2]))
+    editor = ConflictEditor(window.backend, "l.txt", window)
+    editor._resolve_all(Choice.OURS)
+    editor.result.setPlainText(editor.result.toPlainText() + "日本\n")
+    editor._mark_resolved()
+    assert warnings and "can't be stored" in warnings[0]
+    assert window.backend.conflicted_paths() == ["l.txt"]  # nothing was written or staged
+
+
+def test_conflict_editor_utf8_file_unchanged_behaviour(window, repo):
+    from gitops.core.conflicts import Choice
+    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+
+    repo.write("u.txt", "naïve\nbase\n")
+    repo.commit("utf8 base")
+    repo.git("switch", "-q", "-c", "side2")
+    repo.write("u.txt", "naïve\nside\n")
+    repo.commit("side2")
+    repo.git("switch", "-q", "main")
+    repo.write("u.txt", "naïve\nmain\n")
+    repo.commit("main2")
+    window.backend.merge("side2")
+    editor = ConflictEditor(window.backend, "u.txt", window)
+    assert editor.encoding == "utf-8" and not editor.encoding_notice.isVisibleTo(editor)
+    editor._resolve_all(Choice.OURS)
+    editor.result.setPlainText(editor.result.toPlainText() + "日本\n")
+    editor._mark_resolved()
+    assert (repo.path / "u.txt").read_text(encoding="utf-8") == "naïve\nmain\n日本\n"
+
+
+def test_changes_view_stages_line_in_latin1_file(window, repo):
+    (repo.path / "l.txt").write_bytes(b"caf\xe9 = 1\nline2\n")
+    repo.commit("latin1")
+    (repo.path / "l.txt").write_bytes(b"caf\xe9 = 1\nLINE2\nextra\n")
+    window._refresh_status()
+    changes = window.changes
+    changes.unstaged.setCurrentRow(0)
+    assert "café = 1" in changes.diff.toPlainText()
+    select_diff_line(changes.diff, "+extra")
+    changes.apply_lines()
+    assert window.backend.run_bytes("show", ":l.txt") == b"caf\xe9 = 1\nline2\nextra\n"

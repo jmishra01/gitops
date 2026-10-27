@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from gitops.core.compare import is_binary
+from gitops.core.encoding import pick_encoding
 from gitops.core.conflicts import BASE_MARK, OURS_MARK, SPLIT_MARK, THEIRS_MARK, Choice, parse_conflicts, resolve, resolve_all
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.ui.theme import colors
@@ -76,12 +77,12 @@ def _pane(title: str, editor: QPlainTextEdit) -> QWidget:
     return box
 
 
-def _text(data: bytes | None, missing: str) -> str:
+def _text(data: bytes | None, missing: str, encoding: str) -> str:
     if data is None:
         return missing
     if is_binary(data):
         return f"Binary file, {len(data):,} bytes"
-    return data.decode("utf-8", errors="replace")
+    return data.decode(encoding)  # pick_encoding guarantees this can't fail
 
 
 class ConflictEditor(QDialog):
@@ -98,6 +99,8 @@ class ConflictEditor(QDialog):
         working = backend.root / path
         self.working = working.read_bytes() if working.is_file() else None
         self.binary = any(d is not None and is_binary(d) for d in (self.base, self.ours, self.theirs, self.working))
+        # Decode every version the same way, and save back with it, so bytes we didn't edit survive exactly.
+        self.encoding = pick_encoding(self.base, self.ours, self.theirs, self.working)
 
         mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
 
@@ -105,7 +108,7 @@ class ConflictEditor(QDialog):
             view = QPlainTextEdit(readOnly=True)
             view.setFont(mono)
             view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-            view.setPlainText(_text(data, missing))
+            view.setPlainText(_text(data, missing, self.encoding))
             return view
 
         top = QSplitter()
@@ -121,7 +124,7 @@ class ConflictEditor(QDialog):
             self.result.setPlainText("Binary file: choose a whole version with the buttons below.")
             self.result.setReadOnly(True)
         else:
-            self.result.setPlainText(_text(self.working, ""))
+            self.result.setPlainText(_text(self.working, "", self.encoding))
         self.result.textChanged.connect(self._update_status)
         self.result.cursorPositionChanged.connect(self._update_status)
 
@@ -177,7 +180,16 @@ class ConflictEditor(QDialog):
         footer.addWidget(cancel)
         footer.addWidget(self.resolve_btn)
 
+        self.encoding_notice = QLabel(
+            "This file isn't UTF-8, so it's shown as Latin-1. Picking sides keeps every byte exactly; "
+            "characters you type must exist in Latin-1."
+        )
+        self.encoding_notice.setWordWrap(True)
+        self.encoding_notice.setStyleSheet(f"color: {colors().warning};")
+        self.encoding_notice.setVisible(self.encoding != "utf-8" and not self.binary)
+
         layout = QVBoxLayout(self)
+        layout.addWidget(self.encoding_notice)
         layout.addWidget(split, 1)
         layout.addLayout(footer)
         self._jump(1, from_start=True)
@@ -272,7 +284,18 @@ class ConflictEditor(QDialog):
         # QPlainTextEdit normalises line endings to \n; put CRLF back if the file used it.
         if self.working and b"\r\n" in self.working:
             text = text.replace("\r\n", "\n").replace("\n", "\r\n")
-        self._save(text.encode("utf-8"))
+        try:
+            data = text.encode(self.encoding)
+        except UnicodeEncodeError as exc:
+            bad = exc.object[exc.start : exc.end]
+            QMessageBox.warning(
+                self,
+                "Can't save these characters",
+                f"“{bad}” can't be stored in this file's encoding ({self.encoding}). "
+                "Remove or replace it, then mark resolved again.",
+            )
+            return
+        self._save(data)
 
     def _save(self, data: bytes | None) -> None:
         try:
