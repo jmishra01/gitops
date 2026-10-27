@@ -1,0 +1,3 @@
+# Formatting-only commits, skipped by git blame (git config blame.ignoreRevsFile .git-blame-ignore-revs)
+# Format the code with ruff
+af5c631b2adba429ba2659452b5c8a012c6386a1
