@@ -236,7 +236,7 @@ def test_blame_tab(window, repo, qtbot):
     repo.write("auth.py", "def oauth(user):\n    pass\nnew line\n")
     window._open_blame("auth.py", None)
     qtbot.waitUntil(lambda: window.blame.model.rowCount() == 3, timeout=5000)
-    assert window.blame.model.item(2, 0).text() == "uncommitted"
+    assert window.blame.model.item(2, 1).text() == "Not committed"
     assert window.blame.model.item(0, 4).text() == "def oauth(user):"
     window.blame.table.selectRow(0)
     qtbot.waitUntil(lambda: "switch to oauth" in window.blame.diff.toPlainText(), timeout=5000)

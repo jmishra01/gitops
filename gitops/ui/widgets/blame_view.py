@@ -13,6 +13,13 @@ from gitops.ui.widgets.diff_view import DiffView
 from gitops.ui.widgets.hunk_view import mono_font
 
 
+def card(content: QWidget) -> QFrame:
+    frame = QFrame(objectName="HunkCard")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(1, 1, 1, 1)
+    layout.addWidget(content)
+    return frame
+
 
 class BlameView(QWidget):
     """Who last changed each line of a file, and in which commit."""
@@ -47,6 +54,8 @@ class BlameView(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(22)
         self.table.setAlternatingRowColors(False)
         self.table.setFrameShape(QFrame.Shape.NoFrame)
+        self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.table.setStyleSheet("QTableView::item { padding-left: 6px; padding-right: 6px; }")
         self.table.horizontalHeader().hide()
         header = self.table.horizontalHeader()
         for column, width in ((0, 86), (1, 140), (2, 96), (3, 52)):
@@ -56,21 +65,25 @@ class BlameView(QWidget):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._menu)
         self.diff = DiffView()
+        self.diff.setFrameShape(QFrame.Shape.NoFrame)
 
         split = QSplitter(Qt.Orientation.Vertical, objectName="blame_split")
-        split.addWidget(self.table)
-        split.addWidget(self.diff)
-        split.setSizes([460, 240])
-        split.setHandleWidth(1)
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.bar)
-        layout.addWidget(split, 1)
+        split.addWidget(card(self.table))
+        split.addWidget(card(self.diff))
+        split.setSizes([480, 220])
+        split.setHandleWidth(12)
+        split.setChildrenCollapsible(False)
+        self.layout_ = QVBoxLayout(self)
+        self.layout_.setSpacing(12)
+        self.layout_.addWidget(self.bar)
+        self.layout_.addWidget(split, 1)
 
     def set_embedded(self, embedded: bool) -> None:
         """Inside the file inspector the file is picked by its header, so hide our own picker."""
         self.bar.setVisible(not embedded)
         if embedded:
-            self.layout().setContentsMargins(0, 0, 0, 0)
+            # Same gutters as the History tab's compare pane, so switching tabs doesn't shift the content.
+            self.layout_.setContentsMargins(20, 14, 20, 16)
 
     def set_backend(self, backend: GitBackend | None) -> None:
         self.backend = backend
@@ -102,17 +115,20 @@ class BlameView(QWidget):
             first_of_run = ln.sha != previous_sha
             previous_sha = ln.sha
             if ln.uncommitted:
-                sha, author, when, color = "uncommitted", "You", "", theme.uncommitted_bg
+                sha, author, when, color = "", "Not committed", "", theme.uncommitted_bg
             else:
                 rank = rank_of[ln.timestamp]
                 # Newer lines get a warmer tint so recent changes stand out at a glance.
                 color = theme.age[min(int((1 - rank) * len(theme.age)), len(theme.age) - 1)]
                 sha, author, when = ln.sha[:8], ln.author, relative_time(ln.date)
+            number = item(str(ln.line_number))
+            number.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            number.setForeground(QBrush(QColor(theme.text_secondary)))
             row = [
                 item(sha if first_of_run else "", tooltip=f"{ln.sha}\n{ln.summary}"),
-                item(author if first_of_run else ""),
+                item(author if first_of_run else "", tooltip=ln.author),
                 item(when if first_of_run else ""),
-                item(str(ln.line_number)),
+                number,
                 item(ln.text),
             ]
             for cell in row:

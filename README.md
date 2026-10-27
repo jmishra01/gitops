@@ -52,6 +52,7 @@ The window has a **top bar** (repository and branch switchers, command search, o
 
 ### Files and Blame
 - **File inspector** (Ctrl+Shift+H): a **timeline** of every commit that created, changed, renamed or deleted the file (following renames), a versions list, and a side-by-side **A/B compare** of any two versions or a version and your working copy. Open a version read-only, save a copy, or restore it.
+- **File finder**: Files and Blame open on a full-page list of tracked files. Type part of a name or path (letters in order work too, e.g. `srclog`), use the arrow keys and press Enter. Recently opened files are listed first. Once a file is open, the header box (Ctrl+P) switches to another file and stays on the current tab.
 - **Blame**: who last changed each line, tinted by age. Click a line to open its commit; blame the version before it.
 
 ### Search history (Ctrl+Shift+F)

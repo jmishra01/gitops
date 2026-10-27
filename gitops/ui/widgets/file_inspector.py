@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from PySide6.QtCore import QModelIndex, QRect, QSize, QStringListModel, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QStandardItem, QStandardItemModel
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCompleter,
@@ -43,6 +43,7 @@ from gitops.services.task_runner import Task, TaskRunner
 from gitops.ui.theme import colors
 from gitops.ui.widgets.blame_view import BlameView
 from gitops.ui.widgets.common import relative_time
+from gitops.ui.widgets.file_browser import FileBrowser
 from gitops.ui.widgets.hunk_view import mono_font
 from gitops.ui.widgets.timeline import Mark, TimelineScrubber
 
@@ -295,21 +296,27 @@ class FileInspector(QWidget):
         self.back_btn.clicked.connect(self.back_requested.emit)
         self.title = QLabel(objectName="Title")
         self.subtitle = QLabel(objectName="Muted")
+        self.subtitle.hide()
         titles = QVBoxLayout()
         titles.setSpacing(0)
+        titles.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         titles.addWidget(self.title)
         titles.addWidget(self.subtitle)
         self.picker = QLineEdit(objectName="SearchField")
-        self.picker.setPlaceholderText("Open a file…  src/auth/login.py")
+        self.picker.setPlaceholderText("Open another file…")
+        self.picker.setToolTip("Type part of a file name or path (Ctrl+P)")
         self.picker.setAccessibleName("File to inspect")
-        self.picker.setMaximumWidth(320)
+        self.picker.setClearButtonEnabled(True)
+        self.picker.setMinimumWidth(240)
+        self.picker.setMaximumWidth(420)
+        self.picker.hide()  # the empty page has its own, larger finder
         self.completer = QCompleter(self)
         self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self.completer.setModel(QStringListModel(self))
         self.picker.setCompleter(self.completer)
-        self.picker.returnPressed.connect(lambda: self.show_file(self.picker.text().strip()))
-        self.completer.activated.connect(lambda text: self.show_file(text))
+        self.picker.returnPressed.connect(lambda: self.open_file(self.picker.text().strip()))
+        self.completer.activated.connect(lambda text: self.open_file(text))
 
         segmented = QFrame(objectName="Segmented")
         segmented.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -354,7 +361,7 @@ class FileInspector(QWidget):
         hl.setSpacing(12)
         hl.addWidget(self.back_btn)
         hl.addLayout(titles, 1)
-        hl.addWidget(self.picker)
+        hl.addWidget(self.picker, 1)
         hl.addWidget(segmented)
         hl.addWidget(self.options)
 
@@ -465,9 +472,10 @@ class FileInspector(QWidget):
         self.blame = BlameView(runner)
         self.blame.set_embedded(True)
 
-        self.empty = QLabel("Pick a file to see its whole story: every version, who changed what, and how it compares.", objectName="EmptyState")
-        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty.setWordWrap(True)
+        self.empty = FileBrowser()
+        self.empty.file_chosen.connect(self.open_file)
+        find = QShortcut(QKeySequence("Ctrl+P"), self, context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        find.activated.connect(self.focus_finder)
         self.pages = QStackedWidget()
         for w in (self.empty, history_page, self.blame):
             self.pages.addWidget(w)
@@ -491,12 +499,27 @@ class FileInspector(QWidget):
         self.model.clear()
         self.title.setText("File inspector")
         self.subtitle.clear()
+        self.subtitle.hide()
+        self.picker.hide()
         self.pages.setCurrentWidget(self.empty)
         self.blame.set_backend(backend)
+        self.empty.set_files([])
+        self.search_tab.setEnabled(False)
         if backend:
             task = Task(backend.tracked_files)
-            task.signals.result.connect(lambda files, b=backend: b is self.backend and self.completer.model().setStringList(files))
+            task.signals.result.connect(lambda files, b=backend: b is self.backend and self._set_files(files))
             self.runner.submit(task)
+
+    def _set_files(self, files: list[str]) -> None:
+        self.completer.model().setStringList(files)
+        self.empty.set_files(files)
+
+    def focus_finder(self) -> None:
+        if self.pages.currentWidget() is self.empty:
+            self.empty.focus_search()
+        else:
+            self.picker.setFocus()
+            self.picker.selectAll()
 
     def apply_theme(self) -> None:
         c = colors()
@@ -513,7 +536,12 @@ class FileInspector(QWidget):
 
     def show_tab(self, tab: str) -> None:
         if not self.path:
+            # No file yet: remember which tab was asked for and let the user pick a file.
+            (self.blame_tab if tab == "blame" else self.history_tab).setChecked(True)
+            self.title.setText("Blame" if tab == "blame" else "File inspector")
+            self.empty.set_purpose(tab)
             self.pages.setCurrentWidget(self.empty)
+            self.empty.focus_search()
             return
         if tab == "blame":
             self.blame_tab.setChecked(True)
@@ -523,6 +551,15 @@ class FileInspector(QWidget):
         else:
             self.history_tab.setChecked(True)
             self.pages.setCurrentWidget(self.history_page)
+
+    def open_file(self, path: str) -> None:
+        """Open a file picked in the finder or header, staying on the tab the user is on."""
+        if not path:
+            return
+        tab = "blame" if self.blame_tab.isChecked() else "history"
+        self.show_file(path, tab=tab)
+        if tab == "blame":
+            self.show_tab("blame")
 
     def show_blame(self, path: str, rev: str | None) -> None:
         if path != self.path:
@@ -536,9 +573,13 @@ class FileInspector(QWidget):
             return
         self.path = path.strip().lstrip("/")
         self.picker.clear()
+        self.picker.show()
+        self.empty.remember(self.path)
         name = PurePosixPath(self.path).name
         self.title.setText(name)
         self.subtitle.setText(self.path)
+        self.subtitle.show()
+        self.search_tab.setEnabled(True)
         self.summary.setText("Loading history…")
         self.model.clear()
         self.versions = []

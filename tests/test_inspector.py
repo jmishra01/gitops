@@ -128,3 +128,28 @@ def test_versions_for_deleted_and_binary(repo, tmp_path):
     assert [v.kind for v in versions] == ["Working copy", "Deleted", "Created"]
     assert version_bytes(backend, versions[1]) == b"\0\1"  # a deletion shows the last content
     assert versions[2].delta == "binary"
+
+
+def test_rank_files_prefers_name_matches():
+    from gitops.ui.widgets.file_browser import rank_files
+
+    files = ["docs/login-notes.md", "src/auth/login.py", "src/auth/session.py", "tests/test_session.py"]
+    assert rank_files(files, "login") == ["src/auth/login.py", "docs/login-notes.md"]
+    assert rank_files(files, "auth") == ["src/auth/login.py", "src/auth/session.py"]
+    assert rank_files(files, "srclog") == ["src/auth/login.py"]
+    assert rank_files(files, "zzz") == []
+    assert rank_files(files, "") == files
+
+
+def test_finder_opens_file_on_the_blame_tab(window, qtbot):
+    ins = window.inspector
+    window._rail_selected("blame")
+    assert ins.pages.currentWidget() is ins.empty
+    assert not ins.picker.isVisible()
+    qtbot.waitUntil(lambda: "src/auth.py" in ins.empty.files, timeout=5000)
+    ins.empty.search.setText("auth")
+    ins.empty.search.returnPressed.emit()
+    assert ins.path == "src/auth.py"
+    assert ins.pages.currentWidget() is ins.blame
+    qtbot.waitUntil(lambda: len(ins.blame.lines) == 3, timeout=5000)
+    assert ins.empty.recent == ["src/auth.py"]
