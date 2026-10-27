@@ -86,7 +86,12 @@ def _git_env(extra: dict[str, str] | None = None) -> dict[str, str] | None:
 # so ssh, credential helpers and GPG can't sit waiting on a prompt nobody can
 # see (launched from a terminal, they would otherwise grab it and hang). They
 # fail fast instead, or use a graphical prompt such as ssh-askpass or pinentry-mac.
-_DETACHED = {"start_new_session": True}
+# On Windows a console program started from a GUI app gets a console window of
+# its own, so every git call would flash one; CREATE_NO_WINDOW keeps it hidden
+# (and git's own children, such as ssh, inherit that hidden console).
+_DETACHED: dict[str, object] = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
+)
 
 
 def _kill(proc: subprocess.Popen[bytes]) -> None:
@@ -174,7 +179,12 @@ class GitBackend:
     def init(path: str | os.PathLike[str]) -> GitBackend:
         Path(path).mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            ["git", "init", "-q", str(path)], check=True, capture_output=True, stdin=subprocess.DEVNULL, env=_git_env()
+            ["git", "init", "-q", str(path)],
+            check=True,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            env=_git_env(),
+            **_DETACHED,
         )
         return GitBackend(path)
 
@@ -969,7 +979,12 @@ class GitBackend:
         """
         with tempfile.TemporaryDirectory(prefix="gitops-ignore-") as tmp:
             subprocess.run(
-                ["git", "init", "-q", tmp], check=True, capture_output=True, stdin=subprocess.DEVNULL, env=_git_env()
+                ["git", "init", "-q", tmp],
+                check=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                env=_git_env(),
+                **_DETACHED,
             )
             Path(tmp, ".gitignore").write_text(rules, errors="surrogateescape")
             proc = subprocess.run(
@@ -978,6 +993,7 @@ class GitBackend:
                 text=True,
                 stdin=subprocess.DEVNULL,
                 env=_git_env(),
+                **_DETACHED,
             )
         if proc.returncode != 0:
             return None
