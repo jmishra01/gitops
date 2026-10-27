@@ -232,3 +232,25 @@ def test_align_side_by_side():
     assert [r.kind for r in align(["x"], [])] == ["delete"]
     assert lines_of(b"a\r\nb\n") == ["a", "b"] and lines_of(b"a\nb") == ["a", "b"] and lines_of(None) == []
     assert lines_of(b"caf\xe9\n") == ["café"]
+
+
+def test_segments_and_render_resolution():
+    from gitops.core.conflicts import render_resolution, split_segments
+
+    segments = split_segments(MERGE_STYLE)
+    assert [s.is_conflict for s in segments] == [False, True, False, True, False]
+    assert "".join(line for s in segments for line in s.lines) == MERGE_STYLE  # lossless split
+
+    assert render_resolution(segments, {}) == MERGE_STYLE  # nothing decided: markers stay
+    assert render_resolution(segments, {0: Choice.THEIRS, 1: Choice.BOTH}) == "keep\ntheirs 1\nmiddle\no\nt\nend\n"
+    hand = render_resolution(segments, {0: "custom\nlines", 1: Choice.OURS})
+    assert hand == "keep\ncustom\nlines\nmiddle\no\nend\n"
+
+
+def test_render_resolution_keeps_crlf_for_typed_text():
+    from gitops.core.conflicts import eol_of, render_resolution, split_segments
+
+    text = "a\r\n<<<<<<< HEAD\r\nx\r\n=======\r\ny\r\n>>>>>>> b\r\nz\r\n"
+    segments = split_segments(text)
+    assert eol_of(text) == "\r\n"
+    assert render_resolution(segments, {0: "typed\nlines\n"}, eol_of(text)) == "a\r\ntyped\r\nlines\r\nz\r\n"

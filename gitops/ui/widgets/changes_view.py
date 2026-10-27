@@ -27,7 +27,7 @@ from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import FileStatus
 from gitops.core.patch import FilePatch, build_partial_patch, parse_file_patch
 from gitops.services.task_runner import Task, TaskRunner
-from gitops.ui.dialogs.conflict_editor import ConflictEditor
+from gitops.ui.dialogs.conflict_editor import ConflictResolver
 from gitops.ui.theme import colors
 from gitops.ui.widgets.commit_composer import CommitComposer
 from gitops.ui.widgets.diff_view import DiffView
@@ -607,11 +607,17 @@ class ChangesView(QWidget):
         self.banner.show()
 
     def resolve(self, path: str) -> None:
+        """Open the resolver on `path`; it covers every conflicted file of the operation."""
         if not self.backend:
             return
-        if ConflictEditor(self.backend, path, self).exec():
-            self.refresh()
-            self.changed.emit()
+        resolver = ConflictResolver(self.backend, path, self)
+        resolver.exec()
+        self.refresh()
+        self.changed.emit()
+        if resolver.outcome == "commit":
+            self.commit()  # finishes the merge, or continues the rebase/cherry-pick
+        elif resolver.outcome == "abort":
+            self.abort_operation()
 
     def abort_operation(self) -> None:
         what = {"merge": "merge", "rebase": "history rewrite", "cherry-pick": "cherry-pick", "revert": "revert"}.get(

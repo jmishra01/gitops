@@ -113,7 +113,7 @@ def test_push_through_network_runner(window, tmp_path, qtbot):
 
 def test_merge_conflict_resolved_in_editor(window, repo, qtbot):
     from gitops.core.conflicts import Choice
-    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+    from gitops.ui.dialogs.conflict_editor import ConflictResolver
 
     repo.git("switch", "-q", "-c", "feature")
     repo.write("auth.py", "def oauth(user):\n    return 'feature'\n")
@@ -131,12 +131,14 @@ def test_merge_conflict_resolved_in_editor(window, repo, qtbot):
     assert "Merge branch 'feature'" in changes.composer.summary.text()
     assert changes.composer.button.text() == "Commit merge"
 
-    editor = ConflictEditor(window.backend, "auth.py", window)
-    assert "Conflict 1 of 1" in editor.counter.text()
-    editor._resolve_current(Choice.THEIRS)
-    assert "No conflicts left" in editor.counter.text()
-    editor._mark_resolved()
+    resolver = ConflictResolver(window.backend, "auth.py", window)
+    assert "Conflict 1 of 1" in resolver.counter.text()
+    resolver.decide(0, Choice.THEIRS)
+    assert "all decided" in resolver.counter.text()
+    resolver.mark_resolved()
     assert window.backend.conflicted_paths() == []
+    resolver._finish()
+    assert resolver.outcome == "commit"
 
     changes.refresh()
     assert "All conflicts resolved" in changes.banner_label.text()
@@ -424,35 +426,32 @@ def latin1_conflict(window, repo):
 
 def test_conflict_editor_keeps_latin1_bytes(window, latin1_conflict):
     from gitops.core.conflicts import Choice
-    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+    from gitops.ui.dialogs.conflict_editor import ConflictResolver
 
-    editor = ConflictEditor(window.backend, "l.txt", window)
-    assert editor.encoding == "latin-1" and editor.encoding_notice.isVisibleTo(editor)
-    assert "café = 1" in editor.result.toPlainText()  # readable, not a replacement character
-    editor._resolve_all(Choice.THEIRS)
-    editor._mark_resolved()
+    resolver = ConflictResolver(window.backend, "l.txt", window)
+    assert resolver.current.encoding == "latin-1" and "Not UTF-8" in resolver.encoding_note.text()
+    assert "café = 1" in resolver.current.text  # readable, not a replacement character
+    resolver.decide_all(Choice.THEIRS)
+    resolver.mark_resolved()
     assert (latin1_conflict.path / "l.txt").read_bytes() == b"caf\xe9 = 1\nside\n"
     assert window.backend.conflicted_paths() == []
 
 
 def test_conflict_editor_refuses_unencodable_text(window, latin1_conflict, monkeypatch):
-    from gitops.core.conflicts import Choice
     from gitops.ui.dialogs import conflict_editor
-    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+    from gitops.ui.dialogs.conflict_editor import ConflictResolver
 
     warnings = []
     monkeypatch.setattr(conflict_editor.QMessageBox, "warning", lambda *a, **k: warnings.append(a[2]))
-    editor = ConflictEditor(window.backend, "l.txt", window)
-    editor._resolve_all(Choice.OURS)
-    editor.result.setPlainText(editor.result.toPlainText() + "日本\n")
-    editor._mark_resolved()
+    resolver = ConflictResolver(window.backend, "l.txt", window)
+    resolver.decide(0, "main\n日本")  # typed by hand
+    resolver.mark_resolved()
     assert warnings and "can't be stored" in warnings[0]
     assert window.backend.conflicted_paths() == ["l.txt"]  # nothing was written or staged
 
 
 def test_conflict_editor_utf8_file_unchanged_behaviour(window, repo):
-    from gitops.core.conflicts import Choice
-    from gitops.ui.dialogs.conflict_editor import ConflictEditor
+    from gitops.ui.dialogs.conflict_editor import ConflictResolver
 
     repo.write("u.txt", "naïve\nbase\n")
     repo.commit("utf8 base")
@@ -463,11 +462,10 @@ def test_conflict_editor_utf8_file_unchanged_behaviour(window, repo):
     repo.write("u.txt", "naïve\nmain\n")
     repo.commit("main2")
     window.backend.merge("side2")
-    editor = ConflictEditor(window.backend, "u.txt", window)
-    assert editor.encoding == "utf-8" and not editor.encoding_notice.isVisibleTo(editor)
-    editor._resolve_all(Choice.OURS)
-    editor.result.setPlainText(editor.result.toPlainText() + "日本\n")
-    editor._mark_resolved()
+    resolver = ConflictResolver(window.backend, "u.txt", window)
+    assert resolver.current.encoding == "utf-8" and resolver.encoding_note.text() == ""
+    resolver.decide(0, "main\n日本")
+    resolver.mark_resolved()
     assert (repo.path / "u.txt").read_text(encoding="utf-8") == "naïve\nmain\n日本\n"
 
 

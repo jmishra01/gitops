@@ -118,3 +118,71 @@ def resolve_all(text: str, choice: Choice) -> str:
 
 def has_conflict_markers(text: str) -> bool:
     return bool(parse_conflicts(text))
+
+
+# ---------------------------------------------------------------------- segment model for the resolver
+
+@dataclass
+class Segment:
+    """Either shared text (already merged by git) or one conflict between the two sides."""
+
+    lines: list[str]  # original lines with their endings (for a conflict: the marker block itself)
+    block: ConflictBlock | None = None
+
+    @property
+    def is_conflict(self) -> bool:
+        return self.block is not None
+
+
+def split_segments(text: str) -> list[Segment]:
+    lines = text.splitlines(keepends=True)
+    segments: list[Segment] = []
+    cursor = 0
+    for block in parse_conflicts(text):
+        if block.start > cursor:
+            segments.append(Segment(lines[cursor : block.start]))
+        segments.append(Segment(lines[block.start : block.end + 1], block))
+        cursor = block.end + 1
+    if cursor < len(lines):
+        segments.append(Segment(lines[cursor:]))
+    return segments
+
+
+def eol_of(text: str) -> str:
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def with_eol(text: str, eol: str) -> list[str]:
+    """Hand-typed text (always \\n from the editor) as lines ending in the file's own line ending."""
+    if not text:
+        return []
+    parts = text.replace("\r\n", "\n").split("\n")
+    if parts[-1] == "":
+        parts.pop()
+    return [p + eol for p in parts]
+
+
+Decision = Choice | str  # a quick pick, or text typed by hand
+
+
+def render_resolution(segments: list[Segment], decisions: dict[int, Decision], eol: str = "\n") -> str:
+    """The file with each decided conflict replaced; undecided ones keep their markers.
+
+    `decisions` is keyed by conflict number (0, 1, ... in file order). Shared text and
+    picked sides keep their exact original lines, so nothing outside the edits changes.
+    """
+    out: list[str] = []
+    n = 0
+    for seg in segments:
+        if not seg.is_conflict:
+            out.extend(seg.lines)
+            continue
+        decision = decisions.get(n)
+        if decision is None:
+            out.extend(seg.lines)
+        elif isinstance(decision, Choice):
+            out.extend(seg.block.lines_for(decision))
+        else:
+            out.extend(with_eol(decision, eol))
+        n += 1
+    return "".join(out)

@@ -62,6 +62,13 @@ class Colors:
     field_bg: str  # search field
     toast_bg: str
     toast_fg: str
+    # Conflict resolver cards
+    ours_border: str
+    theirs_border: str
+    decide_bg: str
+    decide_border: str
+    decide_fg: str
+    success_fill: str  # solid green button (white text)
 
 
 LIGHT = Colors(
@@ -109,6 +116,12 @@ LIGHT = Colors(
     field_bg="#F1F3F5",
     toast_bg="#16181D",
     toast_fg="#FFFFFF",
+    ours_border="#9DB0F5",
+    theirs_border="#8FCBA4",
+    decide_bg="#FFF8EE",
+    decide_border="#E4A15C",
+    decide_fg="#6B3600",
+    success_fill="#1A7F37",
 )
 
 DARK = Colors(
@@ -156,6 +169,12 @@ DARK = Colors(
     field_bg="#0D1117",
     toast_bg="#E6EDF3",
     toast_fg="#0E1116",
+    ours_border="#2E4A86",
+    theirs_border="#2B6A40",
+    decide_bg="#2E2610",
+    decide_border="#9E6A03",
+    decide_fg="#F2C66D",
+    success_fill="#1F7A35",
 )
 
 _mode = "system"
