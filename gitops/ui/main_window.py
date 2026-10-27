@@ -17,8 +17,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QSplitter,
     QStackedWidget,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -35,19 +33,17 @@ from gitops.ui.dialogs.gitignore_dialog import GitignoreDialog
 from gitops.ui.dialogs.undo_dialog import UndoDialog
 from gitops.ui.widgets.git_console import GitConsole
 from gitops.ui.dialogs.rebase_dialog import RebaseDialog
-from gitops.ui.dialogs.stash_dialogs import StashSaveDialog, StashViewDialog
+from gitops.ui.dialogs.stash_dialogs import StashSaveDialog
+from gitops.ui.widgets.branches_view import BranchesView
 from gitops.ui.widgets.changes_view import ChangesView
 from gitops.ui.widgets.content_search_view import ContentSearchView
 from gitops.ui.widgets.file_inspector import FileInspector
 from gitops.ui.widgets.history_view import HistoryView
 from gitops.ui.widgets.nav_rail import NavRail
+from gitops.ui.widgets.row_list import Row
+from gitops.ui.widgets.stashes_view import StashesView
 from gitops.ui.widgets.top_bar import SyncState, TopBar
 
-BRANCH_ROLE = Qt.ItemDataRole.UserRole  # (name, is_remote, is_current)
-TAG_ROLE = Qt.ItemDataRole.UserRole + 1  # Tag
-STASH_ROLE = Qt.ItemDataRole.UserRole + 2  # Stash
-SUBMODULE_ROLE = Qt.ItemDataRole.UserRole + 3  # Submodule
-WORKTREE_ROLE = Qt.ItemDataRole.UserRole + 4  # Worktree
 MAX_RECENT = 10
 
 
@@ -60,14 +56,6 @@ class MainWindow(QMainWindow):
         self.runner = TaskRunner(self)
         self.backend: GitBackend | None = None
         self.network_task: Task | None = None
-
-        self.sidebar = QTreeWidget(objectName="Sidebar")
-        self.sidebar.setHeaderHidden(True)
-        self.sidebar.setIndentation(14)
-        self.sidebar.setMinimumWidth(200)
-        self.sidebar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.sidebar.customContextMenuRequested.connect(self._branch_menu)
-        self.sidebar.itemDoubleClicked.connect(self._on_branch_double_click)
 
         self.changes = ChangesView()
         self.changes.changed.connect(self.refresh)
@@ -94,12 +82,20 @@ class MainWindow(QMainWindow):
             view.open_file_history.connect(self._open_file_history)
         self.changes.open_blame.connect(self._open_blame)
 
-        # Pages, switched by the nav rail. The branch sidebar shows everywhere except Changes,
-        # where the top bar's branch switcher covers it and the file list needs the room.
+        self.branches = BranchesView()
+        self.branches.action_requested.connect(self._branch_action)
+        self.branches.new_branch_requested.connect(lambda: self._new_branch("HEAD"))
+        self.branches.add_worktree_requested.connect(self._add_worktree)
+        self.stashes = StashesView()
+        self.stashes.action_requested.connect(self._stash_action)
+        self.stashes.save_requested.connect(self._stash_save)
+
+        # Pages, switched by the nav rail.
         self.pages = QStackedWidget()
         self.page_keys = {
-            "changes": self.changes, "history": self.history, "files": self.inspector,
-            "blame": self.inspector, "search": self.content_search,
+            "changes": self.changes, "history": self.history, "branches": self.branches,
+            "stashes": self.stashes, "files": self.inspector, "blame": self.inspector,
+            "search": self.content_search,
         }
         for widget in dict.fromkeys(self.page_keys.values()):
             self.pages.addWidget(widget)
@@ -115,18 +111,13 @@ class MainWindow(QMainWindow):
         self.rail.dashboard_requested.connect(self._open_dashboard)
         self.changes.count_changed.connect(self._set_change_count)
 
-        self.main_split = QSplitter(objectName="main_split")
-        self.main_split.addWidget(self.sidebar)
-        self.main_split.addWidget(self.pages)
-        self.main_split.setStretchFactor(1, 1)
-        self.main_split.setSizes([220, 1060])
         body = QWidget(objectName="AppBody")
         body.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
         row.addWidget(self.rail)
-        row.addWidget(self.main_split, 1)
+        row.addWidget(self.pages, 1)
         column = QVBoxLayout(body)
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(0)
@@ -291,6 +282,7 @@ class MainWindow(QMainWindow):
         self.history.set_backend(backend)
         self.file_history.set_backend(backend)
         self.content_search.set_backend(backend)
+        self.stashes.set_backend(backend)
         self.changes.set_backend(backend)
         self.refresh()
 
@@ -356,8 +348,6 @@ class MainWindow(QMainWindow):
         key = next((k for k, w in self.page_keys.items() if w is widget), None)
         if key:
             self.rail.select(key)
-        # Branches, tags and stashes matter when browsing history; single-file and staging pages need the room.
-        self.sidebar.setVisible(widget in (self.history, self.content_search))
 
     def current_page(self) -> QWidget:
         return self.pages.currentWidget()
@@ -366,64 +356,8 @@ class MainWindow(QMainWindow):
         if backend is not self.backend:
             return  # a different repo was opened while this was loading
         branches, remotes, commits, tags, stashes, submodules, worktrees = data
-        expanded = {
-            self.sidebar.topLevelItem(i).text(0).split(" (")[0]
-            for i in range(self.sidebar.topLevelItemCount())
-            if self.sidebar.topLevelItem(i).isExpanded()
-        }
-        first_load = self.sidebar.topLevelItemCount() == 0
-        self.sidebar.clear()
-        local = QTreeWidgetItem(self.sidebar, ["Local branches"])
-        remote_root = QTreeWidgetItem(self.sidebar, ["Remote branches"])
-        remote_nodes = {r: QTreeWidgetItem(remote_root, [r]) for r in remotes}
-        for b in branches:
-            if b.is_remote:
-                remote_name = b.name.split("/", 1)[0]
-                parent = remote_nodes.get(remote_name) or remote_nodes.setdefault(
-                    remote_name, QTreeWidgetItem(remote_root, [remote_name])
-                )
-                label = b.name.split("/", 1)[1] if "/" in b.name else b.name
-            else:
-                parent, label = local, b.name
-            node = QTreeWidgetItem(parent, [label])
-            node.setData(0, BRANCH_ROLE, (b.name, b.is_remote, b.is_current))
-            if b.is_current:
-                font = node.font(0)
-                font.setBold(True)
-                node.setFont(0, font)
-                node.setText(0, f"● {label}")
-            if b.upstream:
-                node.setToolTip(0, f"Tracks {b.upstream}")
-        tag_root = QTreeWidgetItem(self.sidebar, [f"Tags ({len(tags)})"])
-        for tag in tags:
-            node = QTreeWidgetItem(tag_root, [tag.name])
-            node.setData(0, TAG_ROLE, tag)
-            node.setToolTip(0, tag.message or ("Annotated tag" if tag.annotated else "Lightweight tag"))
-        stash_root = QTreeWidgetItem(self.sidebar, [f"Stashes ({len(stashes)})"])
-        for stash in stashes:
-            node = QTreeWidgetItem(stash_root, [stash.message])
-            node.setData(0, STASH_ROLE, stash)
-            node.setToolTip(0, f"{stash.ref} · double-click to preview")
-        if submodules:
-            sub_root = QTreeWidgetItem(self.sidebar, [f"Submodules ({len(submodules)})"])
-            for sub in submodules:
-                node = QTreeWidgetItem(sub_root, [sub.path + ("" if sub.state == "ok" else f"  ({sub.state})")])
-                node.setData(0, SUBMODULE_ROLE, sub)
-                node.setToolTip(0, f"{sub.sha[:8]} {sub.describe}".strip())
-        if len(worktrees) > 1:
-            wt_root = QTreeWidgetItem(self.sidebar, [f"Worktrees ({len(worktrees)})"])
-            for wt in worktrees:
-                label = f"{wt.branch or 'detached'} · {Path(wt.path).name}" + ("  (this one)" if Path(wt.path) == backend.root else "")
-                node = QTreeWidgetItem(wt_root, [label])
-                node.setData(0, WORKTREE_ROLE, wt)
-                node.setToolTip(0, wt.path)
-        for i in range(self.sidebar.topLevelItemCount()):
-            top = self.sidebar.topLevelItem(i)
-            name = top.text(0).split(" (")[0]
-            if name in expanded or (first_load and name in ("Local branches", "Remote branches")):
-                top.setExpanded(True)
-                for j in range(top.childCount()):
-                    top.child(j).setExpanded(True)
+        self.branches.set_data(backend.root, branches, remotes, tags, worktrees, submodules)
+        self.stashes.set_stashes(stashes)
         query = self.history.filter_edit.text().strip()
         if self.history.filtered and query:
             self.history.refs_delegate.remotes = set(remotes)
@@ -453,61 +387,49 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ branches
 
-    def _branch_at(self, item: QTreeWidgetItem | None):
-        return item.data(0, BRANCH_ROLE) if item else None
-
-    def _on_branch_double_click(self, item: QTreeWidgetItem) -> None:
-        if sub := item.data(0, SUBMODULE_ROLE):
-            self._open_submodule(sub)
-        elif wt := item.data(0, WORKTREE_ROLE):
-            self.open_repo(wt.path)
-        elif stash := item.data(0, STASH_ROLE):
-            self._open_stash(stash)
-        elif tag := item.data(0, TAG_ROLE):
-            self._show_in_history(tag.target_sha)
-        elif (data := self._branch_at(item)) and not data[2]:
-            self._checkout(data[0], data[1])
-
-    def _branch_menu(self, pos) -> None:
-        item = self.sidebar.itemAt(pos)
-        if not item or not self.backend:
+    def _branch_action(self, key: str, row: Row) -> None:
+        """Run an action picked on the Branches page (button, context menu or double-click)."""
+        if not self.backend:
             return
-        if stash := item.data(0, STASH_ROLE):
-            self._stash_menu(stash, pos)
-            return
-        if sub := item.data(0, SUBMODULE_ROLE):
-            menu = QMenu(self)
-            menu.addAction("Open submodule", lambda: self._open_submodule(sub))
-            menu.addAction("Update all submodules", self._update_submodules)
-            menu.exec(self.sidebar.viewport().mapToGlobal(pos))
-            return
-        if wt := item.data(0, WORKTREE_ROLE):
-            self._worktree_menu(wt, pos)
-            return
-        if tag := item.data(0, TAG_ROLE):
-            self._tag_menu(tag, pos)
-            return
-        data = self._branch_at(item)
-        if not data:
-            return
-        name, is_remote, is_current = data
-        menu = QMenu(self)
-        current = self.backend.current_branch()
-        if not is_current and current:
-            menu.addAction(f"Merge {name} into {current}…", lambda: self._merge(name))
-            menu.addAction(f"Rebase {current} onto {name}", lambda: self._stoppable_op(
-                f"Rebased {current} onto {name}", lambda b: b.rebase_onto(name)))
-            menu.addSeparator()
-        if is_remote:
-            menu.addAction("Check out as local branch", lambda: self._checkout(name, True))
-        elif not is_current:
-            menu.addAction(f"Check out {name}", lambda: self._checkout(name, False))
-        menu.addAction("New branch from here…", lambda: self._new_branch(name))
-        if not is_remote:
-            menu.addAction("Rename…", lambda: self._rename_branch(name))
-            delete = menu.addAction("Delete…", lambda: self._delete_branch(name))
-            delete.setEnabled(not is_current)
-        menu.exec(self.sidebar.viewport().mapToGlobal(pos))
+        if row.kind in ("local", "remote"):
+            name, current = row.data.name, self.backend.current_branch()
+            if key == "checkout":
+                self._checkout(name, False)
+            elif key == "checkout_remote":
+                self._checkout(name, True)
+            elif key == "merge":
+                self._merge(name)
+            elif key == "rebase" and current:
+                self._stoppable_op(f"Rebased {current} onto {name}", lambda b: b.rebase_onto(name))
+            elif key == "new_branch":
+                self._new_branch(name)
+            elif key == "show":
+                self._show_in_history(row.data.target_sha)
+            elif key == "rename":
+                self._rename_branch(name)
+            elif key == "delete":
+                self._delete_branch(name)
+        elif row.kind == "tag":
+            tag: Tag = row.data
+            if key == "show":
+                self._show_in_history(tag.target_sha)
+            elif key == "new_branch":
+                self._new_branch(tag.name)
+            elif key.startswith("push_tag:"):
+                remote = key.split(":", 1)[1]
+                self._network(f"Pushing tag {tag.name}", lambda b: b.push_tag(tag.name, remote))
+            elif key == "delete_tag":
+                self._delete_tag(tag)
+        elif row.kind == "worktree":
+            if key == "open":
+                self.open_repo(row.data.path)
+            elif key == "remove_worktree":
+                self._remove_worktree(row.data)
+        elif row.kind == "submodule":
+            if key == "open":
+                self._open_submodule(row.data)
+            elif key == "update_submodules":
+                self._update_submodules()
 
     def _git(self, fn, success: str | None = None) -> bool:
         if not self.backend:
@@ -694,19 +616,6 @@ class MainWindow(QMainWindow):
         if not self.history.select_sha(sha):
             self.statusBar().showMessage("That commit isn't loaded; try All branches", 4000)
 
-    def _tag_menu(self, tag: Tag, pos) -> None:
-        menu = QMenu(self)
-        menu.addAction("Show in history", lambda: self._show_in_history(tag.target_sha))
-        menu.addAction("New branch from here…", lambda: self._new_branch(tag.name))
-        menu.addSeparator()
-        remotes = self.backend.remotes() if self.backend else []
-        for remote in remotes:
-            menu.addAction(
-                f"Push to {remote}", lambda r=remote: self._network(f"Pushing tag {tag.name}", lambda b: b.push_tag(tag.name, r))
-            )
-        menu.addAction("Delete…", lambda: self._delete_tag(tag))
-        menu.exec(self.sidebar.viewport().mapToGlobal(pos))
-
     def _create_tag(self, target: str) -> None:
         name = self._ask_branch_name("New tag", f"Tag name for {target[:8]}:")
         if not name:
@@ -819,24 +728,11 @@ class MainWindow(QMainWindow):
         if self._git(lambda b: saved.append(b.stash_save(message, untracked, keep))):
             self.statusBar().showMessage("Changes stashed" if saved and saved[0] else "No local changes to stash", 4000)
 
-    def _stash_menu(self, stash: Stash, pos) -> None:
-        menu = QMenu(self)
-        menu.addAction("Preview…", lambda: self._open_stash(stash))
-        menu.addAction("Apply", lambda: self._apply_stash(stash, pop=False))
-        menu.addAction("Pop", lambda: self._apply_stash(stash, pop=True))
-        menu.addSeparator()
-        menu.addAction("Drop…", lambda: self._drop_stash(stash))
-        menu.exec(self.sidebar.viewport().mapToGlobal(pos))
-
-    def _open_stash(self, stash: Stash) -> None:
-        if not self.backend:
-            return
-        dialog = StashViewDialog(self.backend, stash, self)
-        dialog.exec()
-        if dialog.chosen == StashViewDialog.DROP:
+    def _stash_action(self, key: str, stash: Stash) -> None:
+        if key == "drop":
             self._drop_stash(stash)
-        elif dialog.chosen:
-            self._apply_stash(stash, pop=dialog.chosen == StashViewDialog.POP)
+        else:
+            self._apply_stash(stash, pop=key == "pop")
 
     def _apply_stash(self, stash: Stash, pop: bool) -> None:
         conflicts: list[str] = []
@@ -962,14 +858,6 @@ class MainWindow(QMainWindow):
     def _update_submodules(self) -> None:
         self._network("Updating submodules", lambda b: b.update_submodules())
 
-    def _worktree_menu(self, wt: Worktree, pos) -> None:
-        menu = QMenu(self)
-        menu.addAction("Open", lambda: self.open_repo(wt.path))
-        menu.addAction("Add worktree…", self._add_worktree)
-        if not wt.is_main and self.backend and Path(wt.path) != self.backend.root:
-            menu.addAction("Remove…", lambda: self._remove_worktree(wt))
-        menu.exec(self.sidebar.viewport().mapToGlobal(pos))
-
     def _add_worktree(self) -> None:
         if not self.backend:
             return
@@ -1068,7 +956,7 @@ class MainWindow(QMainWindow):
             act.setEnabled(not b.is_current)
         menu.addSeparator()
         menu.addAction(self.branch_act)
-        menu.addAction("All branches…", lambda: self.show_page(self.history))
+        menu.addAction("All branches…", lambda: self.show_page(self.branches))
 
     # ------------------------------------------------------------------ commit details actions
 

@@ -281,7 +281,13 @@ class GitBackend:
     def branches(self) -> list[Branch]:
         out = self.run(
             "for-each-ref",
-            f"--format=%(refname){US}%(objectname){US}%(HEAD){US}%(upstream:short)",
+            "--format="
+            + US.join(
+                (
+                    "%(refname)", "%(objectname)", "%(HEAD)", "%(upstream:short)", "%(upstream:track,nobracket)",
+                    "%(committerdate:unix)", "%(authorname)", "%(contents:subject)",
+                )
+            ),
             "refs/heads",
             "refs/remotes",
         )
@@ -289,11 +295,13 @@ class GitBackend:
         for line in out.split("\n"):
             if not line:
                 continue
-            ref, sha, head, upstream = line.split(US)
+            ref, sha, head, upstream, track, ts, author, subject = line.split(US, 7)
             if ref.startswith("refs/remotes/") and ref.endswith("/HEAD"):
                 continue
             is_remote = ref.startswith("refs/remotes/")
             name = ref.removeprefix("refs/remotes/" if is_remote else "refs/heads/")
+            ahead = int(m.group(1)) if (m := re.search(r"ahead (\d+)", track)) else 0
+            behind = int(m.group(1)) if (m := re.search(r"behind (\d+)", track)) else 0
             result.append(
                 Branch(
                     name=name,
@@ -301,6 +309,12 @@ class GitBackend:
                     is_current=head == "*",
                     target_sha=sha,
                     upstream=upstream or None,
+                    ahead=ahead,
+                    behind=behind,
+                    upstream_gone=track == "gone",
+                    subject=subject,
+                    author=author,
+                    timestamp=int(ts or 0),
                 )
             )
         return result

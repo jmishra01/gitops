@@ -33,11 +33,12 @@ def window(qtbot, qapp, tmp_path, repo):
     return w
 
 
-def test_history_graph_and_sidebar(window, qtbot):
+def test_history_graph_and_branches_page(window, qtbot):
     assert window.history.model.item(0, 1).text() == "switch to oauth"
     assert "HEAD -> main" in window.history.model.item(0, 1).data(0x0100)
     assert window.history.model.item(0, 0).data(0x0100).column == 0
-    assert "main" in window.sidebar.topLevelItem(0).child(0).text(0)
+    qtbot.waitUntil(lambda: [r.title for r in window.branches.list.rows()] == ["main"], timeout=5000)
+    assert window.branches.list.rows()[0].current
     qtbot.waitUntil(lambda: "+def oauth(user):" in window.history.details.diff_text(), timeout=5000)
 
 
@@ -90,10 +91,10 @@ def test_stage_selected_line_and_commit(window, repo, qtbot):
     assert changes.staged_paths() == [] and changes.unstaged_paths() == ["auth.py"]
 
 
-def test_create_branch_shows_in_sidebar(window, qtbot):
+def test_create_branch_shows_on_branches_page(window, qtbot):
     window.backend.create_branch("feature/x")
     window.refresh()
-    qtbot.waitUntil(lambda: window.sidebar.topLevelItem(0).childCount() == 2, timeout=5000)
+    qtbot.waitUntil(lambda: len([r for r in window.branches.list.rows() if r.kind == "local"]) == 2, timeout=5000)
     qtbot.waitUntil(lambda: "feature/x" in window.top_bar.branch_button.text(), timeout=5000)
 
 
@@ -149,20 +150,16 @@ def test_merge_conflict_resolved_in_editor(window, repo, qtbot):
     assert (repo.path / "auth.py").read_text() == "def oauth(user):\n    return 'feature'\n"
 
 
-def test_stash_shows_in_sidebar_and_applies(window, repo, qtbot):
+def test_stash_shows_on_stashes_page_and_applies(window, repo, qtbot):
     repo.write("auth.py", "stashed change\n")
     window.backend.stash_save("my wip")
     window.refresh()
 
-    def stash_root():
-        for i in range(window.sidebar.topLevelItemCount()):
-            if window.sidebar.topLevelItem(i).text(0).startswith("Stashes"):
-                return window.sidebar.topLevelItem(i)
-
-    qtbot.waitUntil(lambda: stash_root() is not None and stash_root().childCount() == 1, timeout=5000)
-    stash = stash_root().child(0).data(0, 0x0102)
-    assert "my wip" in stash.message
-    window._apply_stash(stash, pop=True)
+    qtbot.waitUntil(lambda: len(window.stashes.list.rows()) == 1, timeout=5000)
+    (row,) = window.stashes.list.rows()
+    assert row.title == "my wip" and "on main" in row.subtitle
+    qtbot.waitUntil(lambda: "+stashed change" in window.stashes.diff.toPlainText(), timeout=5000)
+    window.stashes.action_requested.emit("pop", window.stashes.selected())
     assert (repo.path / "auth.py").read_text() == "stashed change\n"
     assert window.backend.stashes() == []
 
@@ -393,18 +390,19 @@ def test_ignore_untracked_from_changes(window, repo):
     assert window.changes.unstaged_paths() == [".gitignore"]
 
 
-def test_worktree_section_in_sidebar(window, tmp_path, qtbot):
+def test_worktrees_on_branches_page(window, tmp_path, qtbot):
     window.backend.add_worktree(str(tmp_path / "wt"), "wt-branch", new_branch=True)
     window.refresh()
 
-    def section():
-        for i in range(window.sidebar.topLevelItemCount()):
-            if window.sidebar.topLevelItem(i).text(0).startswith("Worktrees"):
-                return window.sidebar.topLevelItem(i)
+    def worktrees():
+        return [r for r in window.branches.list.rows() if r.kind == "worktree"]
 
-    qtbot.waitUntil(lambda: section() is not None, timeout=5000)
-    assert section().childCount() == 2
-    assert "(this one)" in section().child(0).text(0)
+    qtbot.waitUntil(lambda: len(worktrees()) == 2, timeout=5000)
+    here, other = worktrees()
+    assert here.chip == "This window" and here.current
+    assert other.title == "wt-branch"
+    actions = {a.key: a.enabled for a in window.branches.actions(other)}
+    assert actions == {"open": True, "remove_worktree": True}
 
 
 # ---------------------------------------------------------------- non-UTF-8 files

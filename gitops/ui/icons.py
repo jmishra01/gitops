@@ -141,10 +141,39 @@ def _logo(p: QPainterPath) -> None:
     p.cubicTo(18, 15.5, 12, 14.5, 7, 16.5)
 
 
+def _stash(p: QPainterPath) -> None:
+    p.addRoundedRect(QRectF(3, 4, 18, 5), 1.5, 1.5)
+    p.moveTo(5, 9)
+    p.lineTo(5, 20)
+    p.lineTo(19, 20)
+    p.lineTo(19, 9)
+    p.moveTo(10, 13)
+    p.lineTo(14, 13)
+
+
+def _tag(p: QPainterPath) -> None:
+    p.moveTo(3, 3)
+    p.lineTo(11, 3)
+    p.lineTo(21, 13)
+    p.lineTo(13, 21)
+    p.lineTo(3, 11)
+    p.closeSubpath()
+    p.addEllipse(QPointF(7.5, 7.5), 1.5, 1.5)
+
+
+def _cloud(p: QPainterPath) -> None:
+    p.moveTo(7, 18)
+    p.cubicTo(3, 18, 3, 12, 7, 12)
+    p.cubicTo(7, 6, 16, 6, 16, 11)
+    p.cubicTo(21, 11, 21, 18, 17, 18)
+    p.closeSubpath()
+
+
 SHAPES = {
     "branch": _branch, "folder": _folder, "search": _search, "sync": _sync, "undo": _undo,
     "terminal": _terminal, "settings": _settings, "changes": _changes, "history": _history,
     "file": _file, "blame": _blame, "grid": _grid, "chevron": _chevron, "logo": _logo,
+    "stash": _stash, "tag": _tag, "cloud": _cloud,
 }
 
 

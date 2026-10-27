@@ -170,10 +170,14 @@ def test_quiet_sync_button_when_nothing_to_do(window):
     assert window.top_bar.sync_button.property("variant") == "pill"
 
 
-def test_rail_switches_pages_and_sidebar(window):
-    assert window.current_page() is window.changes and window.sidebar.isHidden()
+def test_rail_switches_pages(window):
+    assert window.current_page() is window.changes
     window.rail.buttons["history"].click()
-    assert window.current_page() is window.history and not window.sidebar.isHidden()
+    assert window.current_page() is window.history
+    window.rail.buttons["branches"].click()
+    assert window.current_page() is window.branches
+    window.rail.buttons["stashes"].click()
+    assert window.current_page() is window.stashes
     window.show_page(window.changes)
     assert window.rail.buttons["changes"].isChecked()
 

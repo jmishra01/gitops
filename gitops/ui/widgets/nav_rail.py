@@ -11,6 +11,8 @@ from gitops.ui.theme import colors
 PAGES = (
     ("changes", "Changes", "changes"),
     ("history", "History", "history"),
+    ("branches", "Branches", "branch"),
+    ("stashes", "Stashes", "stash"),
     ("files", "Files", "file"),
     ("blame", "Blame", "blame"),
     ("search", "Search", "search"),

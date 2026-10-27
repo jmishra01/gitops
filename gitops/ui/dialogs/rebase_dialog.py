@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from gitops.core.rebase import RebaseStep
 from gitops.ui.theme import colors
+from gitops.ui.widgets.common import dialog_heading, set_tone
 
 STEP_ROLE = Qt.ItemDataRole.UserRole
 ACTION_COLORS = {"pick": "muted", "reword": "accent", "squash": "hunk", "fixup": "hunk", "drop": "danger"}
@@ -30,13 +31,8 @@ class RebaseDialog(QDialog):
         self.setWindowTitle("Edit history")
         self.resize(760, 520)
 
-        intro = QLabel(
-            f"Commits after <b>{base_label}</b>, oldest first. Drag to reorder, then choose what happens to each one. "
-            "Squash and fixup fold a commit into the one above it."
-        )
-        intro.setWordWrap(True)
         self.warning = QLabel()
-        self.warning.setStyleSheet(f"color: {colors().warning};")
+        set_tone(self.warning, "warning")
         self.warning.setWordWrap(True)
         if has_merges:
             self.warning.setText("This range contains merge commits. They'll be flattened into a straight line.")
@@ -60,13 +56,19 @@ class RebaseDialog(QDialog):
             ("Drop", "drop", "Remove the commit and its changes"),
         ):
             button = QPushButton(label)
+            button.setProperty("variant", "danger" if action == "drop" else "secondary")
+            button.setAutoDefault(False)
             button.setToolTip(tip)
             button.clicked.connect(lambda _=False, a=action: self._set_action(a))
             buttons_col.addWidget(button)
         buttons_col.addSpacing(12)
         up = QPushButton("Move up")
+        up.setProperty("variant", "ghost")
+        up.setAutoDefault(False)
         up.clicked.connect(lambda: self._move(-1))
         down = QPushButton("Move down")
+        down.setProperty("variant", "ghost")
+        down.setAutoDefault(False)
         down.clicked.connect(lambda: self._move(1))
         buttons_col.addWidget(up)
         buttons_col.addWidget(down)
@@ -77,18 +79,25 @@ class RebaseDialog(QDialog):
         middle.addLayout(buttons_col)
 
         self.error = QLabel()
-        self.error.setStyleSheet(f"color: {colors().danger};")
+        set_tone(self.error, "danger")
         box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         self.start_btn = box.addButton("Rewrite history", QDialogButtonBox.ButtonRole.AcceptRole)
+        self.start_btn.setDefault(True)
+        self.start_btn.setProperty("variant", "primary")
         box.accepted.connect(self.accept)
         box.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(intro)
         layout.addWidget(self.warning)
         layout.addLayout(middle, 1)
         layout.addWidget(self.error)
         layout.addWidget(box)
+        dialog_heading(
+            self, layout, "Edit history",
+            f"Commits after <b>{base_label}</b>, oldest first. Drag to reorder, then choose what happens to each one. "
+            "Squash and fixup fold a commit into the one above it.",
+        )
+        self.warning.setVisible(has_merges)
         if self.list.count():
             self.list.setCurrentRow(0)
         self._validate()

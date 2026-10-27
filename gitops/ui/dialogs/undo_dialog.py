@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QMessageBox, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QVBoxLayout
 
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import ReflogEntry
-from gitops.ui.widgets.common import item, make_table, relative_time
+from gitops.ui.widgets.common import dialog_heading, item, make_table, relative_time
+from gitops.ui.widgets.history_view import TextDelegate
 
 
 class UndoDialog(QDialog):
@@ -22,11 +23,6 @@ class UndoDialog(QDialog):
         self.resize(780, 460)
         self.entries: list[ReflogEntry] = backend.reflog()
 
-        intro = QLabel(
-            f"Where <b>{branch}</b> has pointed, newest first. Restoring moves the branch back to that point; "
-            "uncommitted changes are kept, and git refuses rather than overwrite them."
-        )
-        intro.setWordWrap(True)
         self.table, model = make_table(["", "Action", "Commit", "When"], 1)
         for n, e in enumerate(self.entries):
             model.appendRow([
@@ -35,18 +31,33 @@ class UndoDialog(QDialog):
                 item(e.sha[:8], tooltip=e.sha),
                 item(relative_time(e.date), tooltip=e.date.strftime("%Y-%m-%d %H:%M:%S")),
             ])
+        self.table.setObjectName("CommitTable")
+        self.table.setAlternatingRowColors(False)
+        self.table.horizontalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(32)
+        self.table.setItemDelegate(TextDelegate(self.table))  # soft selection, like History
+        header = self.table.horizontalHeader()
+        for column, width in ((0, 96), (2, 96), (3, 110)):
+            header.setSectionResizeMode(column, header.ResizeMode.Fixed)
+            self.table.setColumnWidth(column, width)
         if len(self.entries) > 1:
             self.table.selectRow(1)
         self.table.doubleClicked.connect(lambda _i: self._restore())
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         restore = buttons.addButton("Restore to selected", QDialogButtonBox.ButtonRole.ActionRole)
+        restore.setDefault(True)
+        restore.setProperty("variant", "primary")
         restore.clicked.connect(self._restore)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
-        layout.addWidget(intro)
         layout.addWidget(self.table, 1)
         layout.addWidget(buttons)
+        dialog_heading(
+            self, layout, f"Undo on {branch}",
+            f"Every place {branch} has pointed, newest first. Restoring moves the branch back to that point; "
+            "uncommitted changes are kept, and git refuses rather than overwrite them.",
+        )
 
     def _restore(self) -> None:
         row = self.table.currentIndex().row()

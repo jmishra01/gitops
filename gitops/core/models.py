@@ -56,6 +56,16 @@ class Branch:
     is_current: bool
     target_sha: str
     upstream: str | None = None
+    ahead: int = 0  # commits not on the upstream yet
+    behind: int = 0  # upstream commits not here yet
+    upstream_gone: bool = False  # the upstream branch was deleted on the remote
+    subject: str = ""  # tip commit
+    author: str = ""
+    timestamp: int = 0
+
+    @property
+    def date(self) -> datetime:
+        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
 
 
 @dataclass(frozen=True)

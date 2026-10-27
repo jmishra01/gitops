@@ -49,7 +49,6 @@ def test_header_versions_and_summary(window, qtbot):
     assert "4 versions" in ins.summary.text() and "Lena Chen" in ins.summary.text() and "renamed" in ins.summary.text()
     assert [v.delta for v in ins.versions] == ["", "+1", "±0", "+1", "+1"]
     assert [m.kind for m in ins.timeline.marks] == ["working", "modified", "renamed", "modified", "created"]
-    assert window.sidebar.isHidden()
 
 
 def test_identical_and_compare_rows(window, qtbot):

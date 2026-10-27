@@ -4,7 +4,7 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPixmap, QStandardItem, QStandardItemModel
-from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView
+from PySide6.QtWidgets import QAbstractItemView, QBoxLayout, QHeaderView, QLabel, QTableView, QWidget
 
 from gitops.core.models import ChangeKind
 from gitops.ui.theme import colors
@@ -20,6 +20,27 @@ KIND_COLORS = {
     ChangeKind.DELETED: "danger",
     ChangeKind.REMOVED: "danger",
 }
+
+
+def set_tone(label: QLabel, tone: str | None) -> None:
+    """Colour a status label from the theme ("danger", "warning", "success"); follows theme switches."""
+    label.setProperty("tone", tone or "")
+    label.style().unpolish(label)
+    label.style().polish(label)
+
+
+def dialog_heading(dialog: QWidget, layout: QBoxLayout, title: str, intro: str = "") -> QLabel | None:
+    """Opt a dialog into the workbench look and put a title (and optional intro) at the top of its layout."""
+    dialog.setObjectName("Dialog")
+    layout.setContentsMargins(20, 18, 20, 16)
+    layout.setSpacing(10)
+    layout.insertWidget(0, QLabel(title, objectName="Title"))
+    if not intro:
+        return None
+    label = QLabel(intro, objectName="Muted")
+    label.setWordWrap(True)
+    layout.insertWidget(1, label)
+    return label
 
 
 def relative_time(ts: datetime) -> str:

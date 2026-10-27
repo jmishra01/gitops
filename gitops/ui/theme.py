@@ -291,10 +291,13 @@ def stylesheet(c: Colors) -> str:
         padding: 0px 12px; min-height: 30px; font-weight: 500;
     }}
     QPushButton[variant="danger"]:hover {{ background: {c.danger_soft}; }}
-    QToolButton[variant="ghost"] {{
+    QPushButton[variant="secondary"]:disabled, QPushButton[variant="danger"]:disabled {{
+        color: {c.text_secondary}; border-color: {c.border}; background: {c.surface};
+    }}
+    QToolButton[variant="ghost"], QPushButton[variant="ghost"] {{
         background: transparent; color: {c.text_secondary}; border: none; border-radius: 8px; padding: 6px;
     }}
-    QToolButton[variant="ghost"]:hover {{ background: {c.field_bg}; color: {c.text}; }}
+    QToolButton[variant="ghost"]:hover, QPushButton[variant="ghost"]:hover {{ background: {c.field_bg}; color: {c.text}; }}
     QToolButton[variant="ghost"]::menu-indicator {{ image: none; width: 0px; }}
     QToolButton[variant="ghost"]:checked {{ background: {c.accent_soft}; }}
     QToolButton[variant="pill"] {{
@@ -316,12 +319,6 @@ def stylesheet(c: Colors) -> str:
 
     #Segmented {{ background: {c.field_bg}; border-radius: 8px; }}
     QToolButton[variant="secondary"]::menu-indicator {{ image: none; width: 0px; }}
-    QTreeWidget#Sidebar {{
-        background: {c.surface}; border: none; border-right: 1px solid {c.border}; padding: 8px 4px; color: {c.text};
-    }}
-    QTreeWidget#Sidebar::item {{ min-height: 26px; border-radius: 6px; padding-left: 2px; }}
-    QTreeWidget#Sidebar::item:hover {{ background: {c.field_bg}; }}
-    QTreeWidget#Sidebar::item:selected {{ background: {c.accent_soft}; color: {c.accent_on_soft}; }}
     QPushButton[variant="segment"] {{
         background: transparent; color: {c.text_secondary}; border: none; border-radius: 6px;
         padding: 0px 10px; min-height: 28px;
@@ -358,6 +355,43 @@ def stylesheet(c: Colors) -> str:
     #SelectionBar QPushButton[variant="primary"] {{ background: {c.primary}; color: #FFFFFF; border: none; }}
     #Banner {{ background: {c.banner_bg}; border: 1px solid {c.banner_border}; border-radius: 8px; }}
     #Banner QLabel {{ color: {c.banner_fg}; border: none; background: transparent; }}
+
+    QLabel[tone="danger"] {{ color: {c.danger_on_soft}; }}
+    QLabel[tone="warning"] {{ color: {c.warning_on_soft}; }}
+    QLabel[tone="success"] {{ color: {c.success_on_soft}; }}
+
+    /* Dialogs: every button box (message boxes too) gets the workbench buttons; ours opt in to the rest. */
+    QDialogButtonBox QPushButton {{
+        background: {c.surface}; color: {c.text}; border: 1px solid {c.border_strong}; border-radius: 8px;
+        padding: 0px 14px; min-height: 30px; min-width: 64px; font-weight: 500;
+    }}
+    QDialogButtonBox QPushButton:hover {{ background: {c.field_bg}; }}
+    QDialogButtonBox QPushButton:default {{ background: {c.primary}; color: #FFFFFF; border: none; font-weight: 600; }}
+    QDialogButtonBox QPushButton:default:hover {{ background: {c.primary_hover}; }}
+    QDialogButtonBox QPushButton:disabled {{ color: {c.text_secondary}; border: 1px solid {c.border}; background: {c.surface}; }}
+    QDialog#Dialog {{ background: {c.surface}; }}
+    #Dialog QLineEdit, #Dialog QPlainTextEdit {{
+        background: {c.surface}; border: 1px solid {c.border_strong}; border-radius: 8px; padding: 4px 8px;
+        color: {c.text}; min-height: 22px;
+    }}
+    #Dialog QLineEdit:focus, #Dialog QPlainTextEdit:focus {{ border: 1px solid {c.primary}; }}
+    #Dialog QListWidget, #Dialog QTableView {{
+        background: {c.surface}; border: 1px solid {c.border}; border-radius: 8px; outline: 0;
+    }}
+    #Dialog QListWidget::item {{ min-height: 30px; padding: 0px 6px; border-radius: 6px; }}
+    #Dialog QListWidget::item:selected, #Dialog QTableView::item:selected {{ background: {c.accent_soft}; color: {c.text}; }}
+    #Dialog QHeaderView::section {{
+        background: {c.surface}; color: {c.text_secondary}; border: none; border-bottom: 1px solid {c.border};
+        padding: 4px 6px; font-weight: 600;
+    }}
+    QDialog#Palette {{ background: {c.surface}; border: 1px solid {c.border_strong}; }}
+    #Palette QListWidget {{ background: {c.surface}; border: none; outline: 0; }}
+
+    QMenu {{ background: {c.surface}; border: 1px solid {c.border}; padding: 4px; }}
+    QMenu::item {{ padding: 6px 28px 6px 14px; border-radius: 6px; color: {c.text}; }}
+    QMenu::item:selected {{ background: {c.accent_soft}; color: {c.accent_on_soft}; }}
+    QMenu::item:disabled {{ color: {c.text_secondary}; }}
+    QMenu::separator {{ height: 1px; background: {c.border}; margin: 4px 8px; }}
     """
 
 

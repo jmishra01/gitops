@@ -12,9 +12,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QVBoxLayout,
 )
 
-from gitops.ui.theme import colors
+from gitops.ui.widgets.common import dialog_heading, set_tone
 
 
 def repo_name_from_url(url: str) -> str:
@@ -33,26 +34,33 @@ class CloneDialog(QDialog):
         self.url.textChanged.connect(self._suggest_name)
         self.parent_dir = QLineEdit(default_parent)
         browse = QPushButton("Browse…")
+        browse.setProperty("variant", "secondary")
+        browse.setAutoDefault(False)  # Enter in the form means Clone
         browse.clicked.connect(self._browse)
         self.name = QLineEdit()
         self.name.textEdited.connect(lambda _t: setattr(self, "_name_edited", True))
         self.error = QLabel()
-        self.error.setStyleSheet(f"color: {colors().danger};")
+        self.error.setWordWrap(True)
+        set_tone(self.error, "danger")
 
         where = QHBoxLayout()
         where.addWidget(self.parent_dir, 1)
         where.addWidget(browse)
-        form = QFormLayout(self)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        layout.addLayout(form)
         form.addRow("Repository URL", self.url)
         form.addRow("Clone into", where)
         form.addRow("Folder name", self.name)
-        form.addRow(self.error)
+        layout.addWidget(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         clone = buttons.addButton("Clone", QDialogButtonBox.ButtonRole.AcceptRole)
         clone.setDefault(True)
+        clone.setProperty("variant", "primary")
         buttons.accepted.connect(self._validate)
         buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        layout.addWidget(buttons)
+        dialog_heading(self, layout, "Clone a repository", "Copy a repository from a server to this computer.")
 
     @property
     def destination(self) -> Path:

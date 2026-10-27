@@ -104,3 +104,19 @@ def test_log_includes_refs(backend):
     refs = backend.log()[0].refs
     assert "HEAD -> main" in refs
     assert "tag: v1" in refs
+
+
+def test_branch_details_track_and_tip(repo, backend, remote):
+    list(backend.push())
+    repo.write("a.txt", "ahead\n")
+    repo.commit("local work", author="Lena")
+    (main,) = [b for b in backend.branches() if b.name == "main"]
+    assert (main.ahead, main.behind, main.upstream, main.upstream_gone) == (1, 0, "origin/main", False)
+    assert (main.subject, main.author) == ("local work", "Lena") and main.timestamp > 0
+
+    backend.create_branch("feature")
+    list(backend.push())
+    backend.run("push", "-q", "origin", "--delete", "feature")
+    backend.run("fetch", "-q", "--prune")
+    (feature,) = [b for b in backend.branches() if b.name == "feature"]
+    assert feature.upstream_gone

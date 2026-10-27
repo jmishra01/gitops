@@ -27,82 +27,57 @@ This produces `dist/GitOps.app` on macOS (a folder on Linux and Windows) using P
 
 ## Features
 
-### Everyday work
-- **Repositories**: open, clone (with live progress), create, open recent. The last repo reopens on launch, and window and pane sizes are remembered.
-- **Changes**:
-  - Stage or unstage whole files, a **hunk**, or **selected lines**. Discard changes (asks first).
-  - Commit or amend (Ctrl+Enter). A hint shows when the subject passes 72 characters or line 2 isn't blank.
-  - Right-click an untracked file to ignore it, its extension, or its folder.
-- **History**:
-  - Commit graph with lanes and merge nodes, plus branch and tag badges.
-  - "All branches" toggle. History loads page by page as you scroll.
-  - **Filter** by message, `author:name`, or SHA.
-- **Branches** (sidebar): check out, create, rename, delete, check out a remote branch as tracking, merge into the current branch, rebase onto.
-- **Remotes**:
-  - Fetch, pull and push in the background, with progress and **Cancel**.
-  - Push sets the upstream the first time. The status bar shows ↑ahead ↓behind.
-  - git never waits on a terminal prompt, so credential problems show as clear errors.
+The window has a **top bar** (repository and branch switchers, command search, one Sync button that knows whether to push, pull or publish, Undo, the git console and theme) and a **navigation rail** with one page per job.
 
-### History tools
-- **File history** (Ctrl+Shift+H):
-  - Every commit that created, modified, renamed or deleted a file, following renames.
-  - A timeline slider; compare **any two versions**, or a version **with your working copy**.
-  - Open a version read-only, save a copy, restore it, or blame it.
-- **Search history** (Ctrl+Shift+F):
-  - Finds text in **any past version** and marks each commit **Added**, **Changed** or **Removed**.
-  - Filters: regex, ignore case, branches, paths, author, since/until.
-  - A summary line, plus **"Where was it at this commit?"**
-- **Blame**: who last changed each line, tinted by age. Click a line to see its commit; blame the version before that commit.
+### Changes
+- Files with **checkboxes**: tick to stage, untick to unstage. A count badge on the rail shows how many files changed.
+- Each **hunk** is a card with Stage / Unstage / Discard buttons. Select **lines** inside a hunk and a floating bar stages or discards just those.
+- **Commit composer**: subject and body, amend, Ctrl+Enter. It warns when the subject passes 72 characters.
+- Right-click an untracked file to ignore it, its extension, or its folder.
+- When a merge, rebase, cherry-pick or revert stops on a conflict, a banner offers Continue, Skip and Abort.
 
-### Rewriting history (v0.2)
-- **Merge** with a **3-pane conflict editor**:
-  - Ours, base and theirs shown side by side, with an editable result.
-  - Choose ours, theirs, both or base per conflict, or take a whole file (handles binary and delete/modify conflicts).
-  - Merges use diff3 markers, so the base is always available.
-- **Stash**: save (message, untracked, keep staged), preview, apply, pop, drop. A pop with conflicts keeps the stash.
-- **Commit menu** (right-click in History): copy SHA, branch here, tag here, **cherry-pick**, **revert** (merges too), **reset** soft, mixed or hard.
-- **Interactive rebase**:
-  - Drag to reorder; pick, reword, squash, fixup, drop.
-  - No editor ever opens. Rewords and squash messages are applied with `exec git commit --amend`.
-- **Operation banner**: when a merge, rebase, cherry-pick or revert stops on a conflict, the Changes tab shows Continue, Skip and Abort.
-- **Tags**: create (lightweight or annotated), delete, push.
+### History
+- Commit list with a lane graph, author avatars and branch/tag badges that stay readable on the selected row.
+- Current branch or all branches; loads page by page; **filter** by message, `author:name` or SHA.
+- **Details panel**: full message, author, actions (check out, branch, tag, cherry-pick, revert, reset, rebase from here), the files the commit changed with +/− bars, and each file's diff.
 
-### Polish
-- **Undo** (Ctrl+Alt+Z): a list of where the branch has pointed, from git's reflog. Restore any point with `reset --keep`, which never overwrites uncommitted work. This undoes commits, amends, merges, rebases and resets.
-- **Themes**: System, Light or Dark (View › Theme). Every diff, blame and conflict color adapts.
-- **Command palette** (Ctrl+K): fuzzy-search every menu command.
-- **Git console** (Ctrl+\`): shows the git commands the app runs, so you can learn or reproduce them.
+### Branches
+- **Local branches** with their tip commit and a chip for where they stand: up to date, ↑ to push, ↓ behind, not published, or upstream gone.
+- **Remote branches** grouped by remote, **tags**, **worktrees** and **submodules** on the same page, with a filter.
+- The details panel lists what you can do with the selected item: switch, check out a remote branch as tracking, merge into the current branch, rebase onto it, branch from it, rename, delete; show, push or delete a tag; open or remove a worktree; open or update submodules. Double-click runs the main action.
 
-### Many repositories (v0.3)
-- **Dashboard** (Ctrl+Shift+D): track many repos and see branch, changes, sync, stashes, last commit and state at a glance. Scan a folder for repos, or fetch them all.
-- **Submodules** and **worktrees** in the sidebar: open them, update submodules, add or remove worktrees.
-- **.gitignore editor** that tests a path against your *unsaved* rules (in a scratch repo, so your real file is never touched).
+### Stashes
+- Every stash with its message, the branch it came from and its age, and a preview of its changes.
+- **Stash changes…** (message, include untracked, keep staged), **Apply**, **Pop**, **Drop**. A pop that conflicts keeps the stash.
 
-## Layout
+### Files and Blame
+- **File inspector** (Ctrl+Shift+H): a **timeline** of every commit that created, changed, renamed or deleted the file (following renames), a versions list, and a side-by-side **A/B compare** of any two versions or a version and your working copy. Open a version read-only, save a copy, or restore it.
+- **Blame**: who last changed each line, tinted by age. Click a line to open its commit; blame the version before it.
 
-```
-gitops/
-├── core/                  # Qt-free git logic (unit-tested)
-│   ├── git_backend.py     # git CLI wrapper: status, staging, branches, remotes, merge, stash,
-│   │                      #   cherry-pick/revert/reset, tags, blame, reflog, worktrees, dashboard
-│   ├── file_history.py    # log --follow parser, version contents
-│   ├── content_search.py  # log -G engine + Added/Changed/Removed classifier
-│   ├── patch.py           # hunk/line staging: partial patches for git apply --cached
-│   ├── conflicts.py       # conflict-marker parser and resolver (merge and diff3 styles)
-│   ├── rebase.py          # editor-free interactive rebase
-│   ├── compare.py         # diff any two file versions
-│   └── graph_layout.py    # commit-graph lane assignment
-├── services/
-│   └── task_runner.py     # QThreadPool tasks, batching, cancellation, owner-safe signals
-└── ui/
-    ├── main_window.py     # menus, toolbar, sidebar, network runner, commit/branch/tag actions
-    ├── dashboard.py       # multi-repo dashboard window
-    ├── theme.py           # light/dark palettes and semantic colors
-    ├── dialogs/           # clone, stash, conflict editor, rebase, undo, .gitignore, command palette
-    └── widgets/           # changes, history+graph, file history, blame, search, diff, git console
-scripts/build_app.sh       # PyInstaller build
-tests/                     # pytest + pytest-qt
-```
+### Search history (Ctrl+Shift+F)
+- Finds text in **any past version** and marks each commit **Added**, **Changed** or **Removed**.
+- Filters: regex, ignore case, all branches, paths, author, since/until.
+- A summary (present now? first added, last removed), the diff of each match, and **"Where was it at this commit?"**
+
+### Conflict resolver
+- The **result** is in the centre with ours and theirs on either side. Each conflict gets one decision: accept ours, theirs, both, or edit, with per-conflict undo.
+- Shows progress across conflicted files; handles binary and delete/modify conflicts. Merges use diff3 markers, so the base is always available.
+
+### Rewriting history
+- **Interactive rebase**: drag to reorder; pick, reword, squash, fixup, drop. No editor ever opens.
+- **Undo** (Ctrl+Alt+Z): every place the branch has pointed, from git's reflog. Restoring uses `reset --keep`, which never overwrites uncommitted work, so commits, amends, merges, rebases and resets can all be undone.
+
+### Many repositories
+- **Repositories dashboard** (Ctrl+Shift+D): a card per repo with status chips (changes, conflicts, ahead/behind, stashes, operation in progress) and the one **next action** that makes sense for it. Filter by *Needs attention*, *Behind* and more; scan a folder for repos; fetch them all.
+
+### Everything else
+- **Remotes**: fetch, pull and push run in the background with progress and **Cancel**. Push sets the upstream the first time. git never waits on a terminal prompt, so credential problems show as clear errors.
+- **Command palette** (Ctrl+K): fuzzy-search every command, with its shortcut.
+- **Git console** (Ctrl+\`): the git commands the app runs, so you can learn or reproduce them.
+- **.gitignore editor** that tests a path against your *unsaved* rules.
+- **Themes**: System, Light or Dark (View › Theme). Every page, diff, blame and dialog follows it.
+- Repositories open, clone (with live progress) and init from the repo menu. The last repo reopens on launch; window and pane sizes are remembered.
+- Files that aren't UTF-8 keep their exact bytes when you stage lines or resolve conflicts.
 
 ## How history search classifies a commit
 

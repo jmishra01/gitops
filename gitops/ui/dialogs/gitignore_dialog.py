@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from gitops.core.encoding import pick_encoding
 from gitops.core.git_backend import GitBackend
-from gitops.ui.theme import colors
+from gitops.ui.widgets.common import dialog_heading, set_tone
 
 
 class GitignoreDialog(QDialog):
@@ -42,14 +42,15 @@ class GitignoreDialog(QDialog):
         test_row.addWidget(self.test_path, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setProperty("variant", "primary")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(f"{backend.gitignore_path()}"))
         layout.addWidget(self.editor, 1)
         layout.addLayout(test_row)
         layout.addWidget(self.result)
         layout.addWidget(buttons)
+        dialog_heading(self, layout, ".gitignore", f"Files matching these rules are left out of git. {backend.gitignore_path()}")
 
     def _test(self, path: str) -> None:
         path = path.strip()
@@ -58,13 +59,12 @@ class GitignoreDialog(QDialog):
             return
         # Tests the text being edited (unsaved), in a scratch repo.
         match = GitBackend.check_ignore_rules(self.editor.toPlainText(), path)
-        c = colors()
         if match:
             line, pattern = match
-            self.result.setStyleSheet(f"color: {c.warning};")
+            set_tone(self.result, "warning")
             self.result.setText(f"Ignored by “{pattern}” (line {line})")
         else:
-            self.result.setStyleSheet(f"color: {c.success};")
+            set_tone(self.result, "success")
             self.result.setText("Not ignored")
 
     def _save(self) -> None:

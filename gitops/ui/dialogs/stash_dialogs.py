@@ -5,15 +5,11 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QLabel,
     QLineEdit,
     QVBoxLayout,
 )
 
-from gitops.core.git_backend import GitBackend
-from gitops.core.models import Stash
-from gitops.ui.widgets.common import relative_time
-from gitops.ui.widgets.diff_view import DiffView
+from gitops.ui.widgets.common import dialog_heading
 
 
 class StashSaveDialog(QDialog):
@@ -24,46 +20,19 @@ class StashSaveDialog(QDialog):
         self.message = QLineEdit(placeholderText="Half-done login refactor")
         self.include_untracked = QCheckBox("Include untracked files", checked=True)
         self.keep_index = QCheckBox("Keep staged changes in the working tree")
-        form = QFormLayout(self)
-        form.addRow(QLabel("Your changes are saved and the working tree goes back to the last commit."))
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
         form.addRow("Message", self.message)
         form.addRow(self.include_untracked)
         form.addRow(self.keep_index)
+        layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        buttons.addButton("Stash", QDialogButtonBox.ButtonRole.AcceptRole).setDefault(True)
+        stash = buttons.addButton("Stash", QDialogButtonBox.ButtonRole.AcceptRole)
+        stash.setDefault(True)
+        stash.setProperty("variant", "primary")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
-
-
-class StashViewDialog(QDialog):
-    """Preview a stash, then apply, pop or drop it. `chosen` holds the action picked."""
-
-    APPLY, POP, DROP = "apply", "pop", "drop"
-
-    def __init__(self, backend: GitBackend, stash: Stash, parent=None):
-        super().__init__(parent)
-        self.chosen: str | None = None
-        self.setWindowTitle(f"{stash.ref}: {stash.message}")
-        self.resize(900, 640)
-        info = QLabel(f"{stash.message} · saved {relative_time(stash.date)}")
-        diff = DiffView()
-        diff.show_async(lambda: backend.stash_diff(stash.ref))
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        for label, action, tip in (
-            ("Apply", self.APPLY, "Restore these changes and keep the stash"),
-            ("Pop", self.POP, "Restore these changes and remove the stash"),
-            ("Drop…", self.DROP, "Delete this stash without applying it"),
-        ):
-            button = buttons.addButton(label, QDialogButtonBox.ButtonRole.ActionRole)
-            button.setToolTip(tip)
-            button.clicked.connect(lambda _=False, a=action: self._choose(a))
-        buttons.rejected.connect(self.reject)
-        layout = QVBoxLayout(self)
-        layout.addWidget(info)
-        layout.addWidget(diff, 1)
+        layout.addSpacing(6)
         layout.addWidget(buttons)
-
-    def _choose(self, action: str) -> None:
-        self.chosen = action
-        self.accept()
+        dialog_heading(self, layout, "Stash changes",
+                       "Your changes are saved aside and the working tree goes back to the last commit.")
