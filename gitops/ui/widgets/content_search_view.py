@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gitops.core.content_search import SearchOptions, iter_search, summarize
+from gitops.core.content_search import SearchOptions, grep_at, iter_search, summarize
 from gitops.core.git_backend import GitBackend
 from gitops.core.models import SearchHit
 from gitops.services.task_runner import Task, TaskRunner
@@ -42,6 +42,13 @@ class ContentSearchView(QWidget):
         self.paths.setMaximumWidth(180)
         self.author = QLineEdit(placeholderText="Author")
         self.author.setMaximumWidth(120)
+        # Anything `git log --since` understands: 2024-01-31, "2 weeks ago", "yesterday".
+        self.since = QLineEdit(placeholderText="Since: 2 weeks ago")
+        self.since.setMaximumWidth(130)
+        self.until = QLineEdit(placeholderText="Until: 2024-12-31")
+        self.until.setMaximumWidth(130)
+        for edit in (self.paths, self.author, self.since, self.until):
+            edit.returnPressed.connect(self.start)
         self.search_btn = QPushButton("Search history")
         self.search_btn.setDefault(True)
         self.search_btn.clicked.connect(self.start)
@@ -59,6 +66,8 @@ class ContentSearchView(QWidget):
         filters.addStretch(1)
         filters.addWidget(self.paths)
         filters.addWidget(self.author)
+        filters.addWidget(self.since)
+        filters.addWidget(self.until)
 
         self.summary = QLabel()
         self.summary.setWordWrap(True)
@@ -69,8 +78,12 @@ class ContentSearchView(QWidget):
         self.table.doubleClicked.connect(lambda idx: self.open_file_history.emit(self.hits[idx.row()].path))
         self.table.setToolTip("Double-click to open the file's full history")
 
+        self.at_commit_btn = QPushButton("Where was it at this commit?")
+        self.at_commit_btn.setToolTip("List every place the text appeared in the selected commit's snapshot")
+        self.at_commit_btn.setEnabled(False)
+        self.at_commit_btn.clicked.connect(self._show_at_commit)
         self.diff = DiffView()
-        split = QSplitter(Qt.Orientation.Vertical)
+        split = QSplitter(Qt.Orientation.Vertical, objectName="search_split")
         split.addWidget(self.table)
         split.addWidget(self.diff)
         split.setSizes([260, 340])
@@ -78,7 +91,10 @@ class ContentSearchView(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addLayout(filters)
-        layout.addWidget(self.summary)
+        summary_row = QHBoxLayout()
+        summary_row.addWidget(self.summary, 1)
+        summary_row.addWidget(self.at_commit_btn)
+        layout.addLayout(summary_row)
         layout.addWidget(split, 1)
 
     def set_backend(self, backend: GitBackend | None) -> None:
@@ -87,6 +103,7 @@ class ContentSearchView(QWidget):
         self._clear()
 
     def _clear(self) -> None:
+        self.at_commit_btn.setEnabled(False)
         self.hits = []
         self.model.removeRows(0, self.model.rowCount())
         self.diff.clear()
@@ -105,6 +122,8 @@ class ContentSearchView(QWidget):
             all_refs=self.all_refs.isChecked(),
             paths=self.paths.text().split(),
             author=self.author.text().strip() or None,
+            since=self.since.text().strip() or None,
+            until=self.until.text().strip() or None,
         )
         try:
             self.opts.python_pattern()
@@ -166,5 +185,25 @@ class ContentSearchView(QWidget):
     def _on_row(self, current, _previous) -> None:
         if not current.isValid() or not self.backend or not self.opts:
             return
+        self.at_commit_btn.setEnabled(True)
         hit = self.hits[current.row()]
-        self.diff.show_diff(self.backend.commit_diff(hit.commit.sha, hit.path), self.opts.python_pattern())
+        backend = self.backend
+        self.diff.show_async(lambda: backend.commit_diff(hit.commit.sha, hit.path), self.opts.python_pattern())
+
+    def _show_at_commit(self) -> None:
+        row = self.table.currentIndex().row()
+        if row < 0 or not self.backend or not self.opts:
+            return
+        hit, backend, opts = self.hits[row], self.backend, self.opts
+
+        def render() -> str:
+            matches = grep_at(backend, opts, hit.commit.sha)
+            header = f"Snapshot at {hit.commit.short_sha} ({hit.commit.subject})"
+            if not matches:
+                return f"{header}\n\nThe text doesn't appear anywhere in this snapshot."
+            files = len({m.path for m in matches})
+            lines = [f"{header}: {len(matches)} matches in {files} file(s)", ""]
+            lines += [f"{m.path}:{m.line_number}: {m.text}" for m in matches]
+            return "\n".join(lines)
+
+        self.diff.show_async(render, opts.python_pattern())

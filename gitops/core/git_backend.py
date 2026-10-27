@@ -11,10 +11,22 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from collections.abc import Iterator, Sequence
+import tempfile
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
-from gitops.core.models import Branch, Commit, FileStatus
+from gitops.core.models import (
+    BlameLine,
+    Branch,
+    Commit,
+    FileStatus,
+    ReflogEntry,
+    RepoSummary,
+    Stash,
+    Submodule,
+    Tag,
+    Worktree,
+)
 
 # Record separator (\x1e) starts each commit; unit separator (\x1f) splits fields.
 COMMIT_FORMAT = "%x1e%H%x1f%h%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%D%x1f%s"
@@ -25,6 +37,8 @@ _BASE_ARGS = ("-c", "core.quotepath=off", "-c", "color.ui=never")
 # Network commands must never block on a terminal prompt the GUI can't answer.
 _NETWORK_ENV = {"GIT_TERMINAL_PROMPT": "0"}
 _PROGRESS_SPLIT = re.compile(rb"[\r\n]")
+# diff3 markers include the common ancestor, so the conflict editor can offer "use base".
+_DIFF3 = ("-c", "merge.conflictStyle=diff3")
 
 
 class GitError(RuntimeError):
@@ -81,6 +95,8 @@ class GitBackend:
     def __init__(self, repo_path: str | os.PathLike[str], git_executable: str = "git"):
         self.git_executable = git_executable
         self.repo_path = Path(repo_path)
+        # Called with each git command's arguments (the UI's git console shows them).
+        self.command_listeners: list[Callable[[list[str]], None]] = []
         self.root = Path(self.run("rev-parse", "--show-toplevel").strip())
 
     @staticmethod
@@ -124,9 +140,18 @@ class GitBackend:
             raise GitError(args, result.returncode, result.stderr.decode("utf-8", errors="replace"))
         return result.stdout
 
-    def run_raw(self, *args: str, input: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
+    def run_raw(
+        self, *args: str, input: bytes | None = None, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[bytes]:
         """Run without raising, for commands whose exit code carries meaning."""
-        return subprocess.run(self._cmd(args), capture_output=True, input=input)
+        self._log(args)
+        return subprocess.run(
+            self._cmd(args), capture_output=True, input=input, env={**os.environ, **env} if env else None
+        )
+
+    def _log(self, args: Sequence[str]) -> None:
+        for listener in self.command_listeners:
+            listener(list(args))
 
     def stream(self, *args: str) -> Iterator[str]:
         """Yield stdout lines as git produces them.
@@ -134,6 +159,7 @@ class GitBackend:
         Closing the generator early (e.g. the user cancels a search) kills the
         git process, so long-running history walks stop promptly.
         """
+        self._log(args)
         proc = subprocess.Popen(
             self._cmd(args),
             stdout=subprocess.PIPE,
@@ -158,6 +184,7 @@ class GitBackend:
 
     def run_progress(self, *args: str) -> Iterator[str]:
         """Run a network command, yielding its progress messages as they update."""
+        self._log(args)
         proc = subprocess.Popen(
             self._cmd(args),
             stdout=subprocess.PIPE,
@@ -371,3 +398,435 @@ class GitBackend:
                 raise GitError(["push"], 1, "This repository has no remote to push to.")
             args += ["-u", target, branch]
         return self.run_progress(*args)
+
+    # ------------------------------------------------------------------ repository state
+
+    def git_path(self, name: str) -> Path:
+        """Location of a file inside .git (handles worktrees and $GIT_DIR)."""
+        rel = self.run("rev-parse", "--git-path", name).strip()
+        return (self.repo_path / rel).resolve()
+
+    def merge_in_progress(self) -> bool:
+        return self.git_path("MERGE_HEAD").exists()
+
+    def merge_message(self) -> str:
+        path = self.git_path("MERGE_MSG")
+        if not path.exists():
+            return ""
+        lines = path.read_text(errors="replace").splitlines()
+        return "\n".join(line for line in lines if not line.startswith("#")).strip()
+
+    def tags(self) -> list[Tag]:
+        out = self.run(
+            "for-each-ref",
+            "--sort=-creatordate",
+            f"--format=%(refname:short){US}%(objecttype){US}%(*objectname){US}%(objectname){US}%(contents:subject)",
+            "refs/tags",
+        )
+        result: list[Tag] = []
+        for line in out.split("\n"):
+            if not line:
+                continue
+            name, objtype, peeled, sha, subject = line.split(US, 4)
+            annotated = objtype == "tag"
+            result.append(Tag(name, peeled if annotated else sha, annotated, subject if annotated else ""))
+        return result
+
+    # ------------------------------------------------------------------ merge
+
+    def merge(self, branch: str, no_ff: bool = False, message: str | None = None) -> list[str]:
+        """Merge `branch` into HEAD. Returns conflicted paths (empty on a clean merge)."""
+        args = ["merge", "--no-edit"]
+        if no_ff:
+            args.append("--no-ff")
+        if message:
+            args += ["-m", message]
+        proc = self.run_raw(*_DIFF3, *args, branch)
+        if proc.returncode == 0:
+            return []
+        conflicts = self.conflicted_paths()
+        if conflicts:
+            return conflicts
+        output = (proc.stdout + proc.stderr).decode("utf-8", errors="replace")
+        raise GitError(args + [branch], proc.returncode, output)
+
+    def merge_abort(self) -> None:
+        self.run("merge", "--abort")
+
+    def conflicted_paths(self) -> list[str]:
+        return [p for p in self.run("diff", "--name-only", "--diff-filter=U").split("\n") if p]
+
+    def conflict_versions(self, path: str) -> tuple[bytes | None, bytes | None, bytes | None]:
+        """(base, ours, theirs) content from index stages 1-3; None where a side doesn't have the file."""
+
+        def stage(n: int) -> bytes | None:
+            proc = self.run_raw("show", f":{n}:{path}")
+            return proc.stdout if proc.returncode == 0 else None
+
+        return stage(1), stage(2), stage(3)
+
+    def mark_resolved(self, path: str, content: bytes | None) -> None:
+        """Write the resolution and stage it; `None` resolves by deleting the file."""
+        target = self.root / path
+        if content is None:
+            self.run("rm", "-q", "--ignore-unmatch", "--", path)
+            target.unlink(missing_ok=True)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        self.run("add", "--", path)
+
+    # ------------------------------------------------------------------ stash
+
+    def stashes(self) -> list[Stash]:
+        out = self.run("stash", "list", f"--format=%gd{US}%H{US}%ct{US}%gs")
+        result: list[Stash] = []
+        for line in out.split("\n"):
+            if line:
+                ref, sha, ts, message = line.split(US, 3)
+                result.append(Stash(ref, sha, int(ts), message))
+        return result
+
+    def stash_save(self, message: str = "", include_untracked: bool = False, keep_index: bool = False) -> bool:
+        """Stash local changes. Returns False when there was nothing to stash."""
+        before = len(self.stashes())
+        args = ["stash", "push", "-q"]
+        if include_untracked:
+            args.append("--include-untracked")
+        if keep_index:
+            args.append("--keep-index")
+        if message:
+            args += ["-m", message]
+        self.run(*args)
+        return len(self.stashes()) > before
+
+    def stash_apply(self, ref: str = "stash@{0}", pop: bool = False) -> list[str]:
+        """Apply (or pop) a stash. Returns conflicted paths; a conflicted pop keeps the stash."""
+        proc = self.run_raw(*_DIFF3, "stash", "pop" if pop else "apply", "--index", ref)
+        if proc.returncode != 0 and b"--index" in proc.stderr + proc.stdout:
+            # The staged part can't be restored exactly; fall back to a plain apply.
+            proc = self.run_raw(*_DIFF3, "stash", "pop" if pop else "apply", ref)
+        if proc.returncode == 0:
+            return []
+        conflicts = self.conflicted_paths()
+        if conflicts:
+            return conflicts
+        raise GitError(["stash", "apply", ref], proc.returncode, (proc.stdout + proc.stderr).decode("utf-8", errors="replace"))
+
+    def stash_drop(self, ref: str) -> None:
+        self.run("stash", "drop", "-q", ref)
+
+    def stash_diff(self, ref: str) -> str:
+        return self.run("stash", "show", "-p", "--include-untracked", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", ref)
+
+    # ------------------------------------------------------------------ operations in progress
+
+    # Commands that may stop for conflicts; their --continue must never open an editor.
+    _NO_EDITOR = {"GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"}
+
+    def operation_in_progress(self) -> str | None:
+        """'merge', 'rebase', 'cherry-pick' or 'revert' when one is stopped mid-way."""
+        if self.git_path("rebase-merge").exists() or self.git_path("rebase-apply").exists():
+            return "rebase"
+        if self.git_path("CHERRY_PICK_HEAD").exists():
+            return "cherry-pick"
+        if self.git_path("REVERT_HEAD").exists():
+            return "revert"
+        if self.git_path("MERGE_HEAD").exists():
+            return "merge"
+        return None
+
+    def _stoppable(self, *args: str, env: dict[str, str] | None = None) -> list[str]:
+        """Run a command that may stop on conflicts. Returns conflicted paths, raises on other errors."""
+        proc = self.run_raw(*_DIFF3, *args, env={**self._NO_EDITOR, **(env or {})})
+        if proc.returncode == 0:
+            return []
+        conflicts = self.conflicted_paths()
+        if conflicts:
+            return conflicts
+        raise GitError(list(args), proc.returncode, (proc.stdout + proc.stderr).decode("utf-8", errors="replace"))
+
+    def continue_operation(self) -> list[str]:
+        op = self.operation_in_progress()
+        if op is None:
+            return []
+        if op == "merge":
+            self.run("commit", "--no-edit")
+            return []
+        return self._stoppable(op, "--continue")
+
+    def abort_operation(self) -> None:
+        op = self.operation_in_progress()
+        if op:
+            self.run(op, "--abort")
+
+    def skip_commit(self) -> list[str]:
+        """Skip the commit a rebase/cherry-pick stopped on."""
+        op = self.operation_in_progress()
+        if op not in ("rebase", "cherry-pick", "revert"):
+            return []
+        return self._stoppable(op, "--skip")
+
+    # ------------------------------------------------------------------ history rewriting
+
+    def cherry_pick(self, *shas: str) -> list[str]:
+        return self._stoppable("cherry-pick", *shas)
+
+    def revert(self, sha: str, mainline: int | None = None) -> list[str]:
+        args = ["revert", "--no-edit"]
+        if mainline:
+            args += ["-m", str(mainline)]
+        return self._stoppable(*args, sha)
+
+    def reset(self, sha: str, mode: str = "mixed") -> None:
+        if mode not in ("soft", "mixed", "hard"):
+            raise ValueError(mode)
+        self.run("reset", "-q", f"--{mode}", sha)
+
+    def rebase_onto(self, upstream: str) -> list[str]:
+        return self._stoppable("rebase", upstream)
+
+    # ------------------------------------------------------------------ tags
+
+    def create_tag(self, name: str, target: str = "HEAD", message: str | None = None) -> None:
+        if message:
+            self.run("tag", "-a", name, target, "-m", message)
+        else:
+            self.run("tag", name, target)
+
+    def delete_tag(self, name: str) -> None:
+        self.run("tag", "-d", name)
+
+    def push_tag(self, name: str, remote: str = "origin") -> Iterator[str]:
+        return self.run_progress("push", "--progress", remote, f"refs/tags/{name}")
+
+    def delete_remote_tag(self, name: str, remote: str = "origin") -> Iterator[str]:
+        return self.run_progress("push", "--progress", remote, f":refs/tags/{name}")
+
+    # ------------------------------------------------------------------ blame and commit search
+
+    def blame(self, path: str, rev: str | None = None) -> list[BlameLine]:
+        """Who last changed each line of `path` (as of `rev`, or the working tree)."""
+        args = ["blame", "--porcelain", "-M", "-C"]
+        if rev:
+            args.append(rev)
+        out = self.run(*args, "--", path)
+        commits: dict[str, dict[str, str]] = {}
+        lines: list[BlameLine] = []
+        current: dict[str, str] | None = None
+        sha = ""
+        final_line = 0
+        for raw in out.split("\n"):
+            if raw.startswith("\t"):
+                info = commits[sha]
+                lines.append(
+                    BlameLine(
+                        sha=sha,
+                        line_number=final_line,
+                        author=info.get("author", ""),
+                        timestamp=int(info.get("author-time", "0")),
+                        summary=info.get("summary", ""),
+                        orig_path=info.get("filename", path),
+                        text=raw[1:],
+                    )
+                )
+                continue
+            parts = raw.split(" ")
+            if len(parts) >= 3 and len(parts[0]) == 40 and all(c in "0123456789abcdef" for c in parts[0]):
+                sha, final_line = parts[0], int(parts[2])
+                current = commits.setdefault(sha, {})
+            elif current is not None and parts and parts[0]:
+                key, _, value = raw.partition(" ")
+                current[key] = value
+        return lines
+
+    def search_commits(self, query: str, all_refs: bool = False, max_count: int = 500) -> list[Commit]:
+        """Find commits by message text, `author:<name>`, or a (partial) SHA."""
+        query = query.strip()
+        if not query or not self.has_commits():
+            return []
+        base = ["log", "--date-order", f"--format={COMMIT_FORMAT}", f"--max-count={max_count}"]
+        base.append("--all" if all_refs else "HEAD")
+        if query.startswith("author:"):
+            args = base + [f"--author={query[7:].strip()}", "--regexp-ignore-case"]
+        else:
+            args = base + ["--fixed-strings", "--regexp-ignore-case", f"--grep={query}"]
+        found = [parse_commit_header(line) for line in self.run(*args).split("\n") if line.startswith(RS)]
+        if re.fullmatch(r"[0-9a-fA-F]{4,40}", query):
+            proc = self.run_raw("log", "-1", f"--format={COMMIT_FORMAT}", f"{query}^{{commit}}", "--")
+            if proc.returncode == 0:
+                head = parse_commit_header(proc.stdout.decode("utf-8", errors="replace").strip("\n"))
+                found = [head] + [c for c in found if c.sha != head.sha]
+        return found
+
+    # ------------------------------------------------------------------ undo via reflog
+
+    def reflog(self, ref: str | None = None, max_count: int = 50) -> list[ReflogEntry]:
+        """Where `ref` (default: the current branch, else HEAD) has pointed, newest first."""
+        ref = ref or self.current_branch() or "HEAD"
+        proc = self.run_raw("reflog", "show", f"--max-count={max_count}", f"--format=%H{US}%gd{US}%gs{US}%ct", ref, "--")
+        if proc.returncode != 0:
+            return []
+        entries: list[ReflogEntry] = []
+        for line in proc.stdout.decode("utf-8", errors="replace").split("\n"):
+            if line:
+                sha, selector, action, ts = line.split(US, 3)
+                entries.append(ReflogEntry(sha, selector, action, int(ts)))
+        return entries
+
+    def restore_to(self, sha: str) -> None:
+        """Move the current branch back to `sha`, keeping uncommitted work.
+
+        Uses `reset --keep`, which refuses (instead of overwriting) when a
+        file with local changes would have to change.
+        """
+        self.run("reset", "-q", "--keep", sha)
+
+    # ------------------------------------------------------------------ submodules and worktrees
+
+    def submodules(self) -> list[Submodule]:
+        if not (self.root / ".gitmodules").exists():
+            return []
+        out = self.run("submodule", "status")
+        states = {" ": "ok", "-": "not initialized", "+": "modified", "U": "conflict"}
+        result: list[Submodule] = []
+        for line in out.split("\n"):
+            if not line:
+                continue
+            flag, rest = line[0], line[1:]
+            parts = rest.split(" ", 2)
+            describe = parts[2].strip("()") if len(parts) > 2 else ""
+            result.append(Submodule(path=parts[1], sha=parts[0], state=states.get(flag, "ok"), describe=describe))
+        return result
+
+    def update_submodules(self) -> Iterator[str]:
+        return self.run_progress("submodule", "update", "--init", "--recursive", "--progress")
+
+    def worktrees(self) -> list[Worktree]:
+        out = self.run("worktree", "list", "--porcelain")
+        result: list[Worktree] = []
+        for block in out.strip().split("\n\n"):
+            if not block.strip():
+                continue
+            fields: dict[str, str] = {}
+            for line in block.split("\n"):
+                key, _, value = line.partition(" ")
+                fields[key] = value
+            branch = fields.get("branch", "").removeprefix("refs/heads/") or None
+            result.append(
+                Worktree(
+                    path=fields.get("worktree", ""),
+                    head=fields.get("HEAD", ""),
+                    branch=branch,
+                    is_main=not result,  # git lists the main worktree first
+                    locked="locked" in fields,
+                    prunable="prunable" in fields,
+                )
+            )
+        return result
+
+    def add_worktree(self, path: str, branch: str, new_branch: bool = False, start: str = "HEAD") -> None:
+        if new_branch:
+            self.run("worktree", "add", "-b", branch, path, start)
+        else:
+            self.run("worktree", "add", path, branch)
+
+    def remove_worktree(self, path: str, force: bool = False) -> None:
+        args = ["worktree", "remove"]
+        if force:
+            args.append("--force")
+        self.run(*args, path)
+
+    # ------------------------------------------------------------------ ignore rules
+
+    def gitignore_path(self) -> Path:
+        return self.root / ".gitignore"
+
+    def read_gitignore(self) -> str:
+        path = self.gitignore_path()
+        return path.read_text(errors="replace") if path.exists() else ""
+
+    def write_gitignore(self, text: str) -> None:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        self.gitignore_path().write_text(text)
+
+    def add_ignore_rule(self, rule: str) -> None:
+        current = self.read_gitignore()
+        if rule in current.splitlines():
+            return
+        prefix = "" if not current or current.endswith("\n") else "\n"
+        self.write_gitignore(current + prefix + rule + "\n")
+
+    def check_ignore(self, path: str) -> tuple[str, int, str] | None:
+        """(source file, line, pattern) of the rule ignoring `path`, or None if it isn't ignored."""
+        proc = self.run_raw("check-ignore", "-v", "--no-index", "--", path)
+        if proc.returncode != 0:
+            return None
+        info = proc.stdout.decode("utf-8", errors="replace").strip().split("\t", 1)[0]
+        source, line, pattern = info.split(":", 2)
+        if pattern.startswith("!"):
+            return None  # matched a negation: explicitly not ignored
+        return source, int(line), pattern
+
+    @staticmethod
+    def check_ignore_rules(rules: str, path: str) -> tuple[int, str] | None:
+        """(line, pattern) if `rules` (unsaved .gitignore text) would ignore `path`.
+
+        Runs in a throwaway repo so the user's real .gitignore is never touched.
+        """
+        with tempfile.TemporaryDirectory(prefix="gitops-ignore-") as tmp:
+            subprocess.run(["git", "init", "-q", tmp], check=True, capture_output=True)
+            Path(tmp, ".gitignore").write_text(rules)
+            proc = subprocess.run(
+                ["git", "-C", tmp, "check-ignore", "-v", "--no-index", "--", path], capture_output=True, text=True
+            )
+        if proc.returncode != 0:
+            return None
+        _, line, pattern = proc.stdout.split("\t", 1)[0].split(":", 2)
+        return None if pattern.startswith("!") else (int(line), pattern)
+
+    # ------------------------------------------------------------------ dashboard
+
+    @staticmethod
+    def summarize_repo(path: str) -> RepoSummary:
+        """Everything the multi-repo dashboard shows, without raising."""
+        name = Path(path).name
+        try:
+            backend = GitBackend(path)
+            statuses = backend.status()
+            log = backend.log(max_count=1)
+            return RepoSummary(
+                path=str(backend.root),
+                name=backend.root.name,
+                branch=backend.current_branch(),
+                changed=len(statuses),
+                conflicts=sum(1 for s in statuses if s.is_conflicted),
+                ahead_behind=backend.ahead_behind(),
+                stashes=len(backend.stashes()),
+                last_commit=log[0] if log else None,
+                operation=backend.operation_in_progress(),
+            )
+        except (GitError, OSError) as exc:
+            return RepoSummary(path, name, None, 0, 0, None, 0, None, None, error=str(exc))
+
+    @staticmethod
+    def find_repos(folder: str, max_depth: int = 3) -> list[str]:
+        """Git repositories under `folder` (not descending into repos or hidden folders)."""
+        found: list[str] = []
+
+        def walk(directory: Path, depth: int) -> None:
+            if (directory / ".git").exists():
+                found.append(str(directory))
+                return
+            if depth >= max_depth:
+                return
+            try:
+                children = sorted(p for p in directory.iterdir() if p.is_dir() and not p.name.startswith("."))
+            except OSError:
+                return
+            for child in children:
+                walk(child, depth + 1)
+
+        walk(Path(folder).expanduser(), 0)
+        return found

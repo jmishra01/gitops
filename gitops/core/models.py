@@ -65,13 +65,40 @@ class FileStatus:
     worktree: str  # unstaged status letter, " " if none
     orig_path: str | None = None
 
+    # Porcelain XY pairs that mean "unmerged" during a merge, rebase or stash apply.
+    CONFLICT_CODES = frozenset({"DD", "AU", "UD", "UA", "DU", "AA", "UU"})
+
+    @property
+    def is_conflicted(self) -> bool:
+        return self.index + self.worktree in self.CONFLICT_CODES
+
     @property
     def is_staged(self) -> bool:
-        return self.index not in (" ", "?")
+        return self.index not in (" ", "?") and not self.is_conflicted
 
     @property
     def is_unstaged(self) -> bool:
-        return self.worktree != " "
+        return self.worktree != " " or self.is_conflicted
+
+
+@dataclass(frozen=True)
+class Stash:
+    ref: str  # "stash@{0}"
+    sha: str
+    timestamp: int
+    message: str
+
+    @property
+    def date(self) -> datetime:
+        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+
+
+@dataclass(frozen=True)
+class Tag:
+    name: str
+    target_sha: str  # the commit the tag points at
+    annotated: bool
+    message: str = ""
 
 
 @dataclass(frozen=True)
@@ -101,3 +128,66 @@ class SearchHit:
         if self.kind is ChangeKind.REMOVED:
             return f"-{first_removed}"
         return f"-{first_removed}  +{first_added}"
+
+
+@dataclass(frozen=True)
+class BlameLine:
+    sha: str
+    line_number: int  # 1-based, in the blamed version
+    author: str
+    timestamp: int
+    summary: str
+    orig_path: str  # path in the commit that introduced the line (differs after renames)
+    text: str
+
+    @property
+    def date(self) -> datetime:
+        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+
+    @property
+    def uncommitted(self) -> bool:
+        return self.sha == "0" * 40
+
+
+@dataclass(frozen=True)
+class ReflogEntry:
+    sha: str
+    selector: str  # e.g. "main@{2}"
+    action: str  # e.g. "commit: Add login", "rebase (finish): ...", "reset: moving to HEAD~1"
+    timestamp: int
+
+    @property
+    def date(self) -> datetime:
+        return datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone()
+
+
+@dataclass(frozen=True)
+class Submodule:
+    path: str
+    sha: str
+    state: str  # "ok", "not initialized", "modified" (checked-out commit differs), "conflict"
+    describe: str = ""
+
+
+@dataclass(frozen=True)
+class Worktree:
+    path: str
+    head: str
+    branch: str | None  # None when detached
+    is_main: bool
+    locked: bool = False
+    prunable: bool = False
+
+
+@dataclass(frozen=True)
+class RepoSummary:
+    path: str
+    name: str
+    branch: str | None
+    changed: int
+    conflicts: int
+    ahead_behind: tuple[int, int] | None
+    stashes: int
+    last_commit: Commit | None
+    operation: str | None
+    error: str | None = None

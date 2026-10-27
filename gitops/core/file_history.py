@@ -81,3 +81,16 @@ def _parse_numstat(out: str) -> dict[str, tuple[int | None, int | None]]:
                 int(removed) if removed != "-" else None,
             )
     return result
+
+
+def version_content(backend: GitBackend, entry: FileHistoryEntry) -> bytes | None:
+    """The file's content as of `entry`; for a deletion, the last content before it."""
+    if entry.kind is ChangeKind.DELETED:
+        proc = backend.run_raw("show", f"{entry.commit.sha}^:{entry.path}")
+        return proc.stdout if proc.returncode == 0 else None
+    return backend.show_file(entry.commit.sha, entry.path)
+
+
+def working_copy(backend: GitBackend, path: str) -> bytes | None:
+    target = backend.root / path
+    return target.read_bytes() if target.is_file() else None

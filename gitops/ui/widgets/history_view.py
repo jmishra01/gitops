@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QSplitter,
     QStyle,
     QStyledItemDelegate,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
 from gitops.core.git_backend import GitBackend
 from gitops.core.graph_layout import GraphRow, layout
 from gitops.core.models import Commit
+from gitops.ui.theme import colors
 from gitops.ui.widgets.common import item, make_table, relative_time
 from gitops.ui.widgets.diff_view import DiffView
 
@@ -71,14 +73,14 @@ class RefsDelegate(QStyledItemDelegate):
 
     def _style(self, ref: str) -> tuple[str, QColor]:
         if ref.startswith("tag: "):
-            return ref[5:], QColor("#9a6700")
+            return ref[5:], QColor(colors().warning)
         if ref.startswith("HEAD -> "):
-            return ref[8:], QColor("#1a7f37")
+            return ref[8:], QColor(colors().success)
         if ref == "HEAD":
-            return "HEAD", QColor("#cf222e")
+            return "HEAD", QColor(colors().danger)
         if ref.split("/", 1)[0] in self.remotes:
-            return ref, QColor("#0969da")
-        return ref, QColor("#1a7f37")
+            return ref, QColor(colors().accent)
+        return ref, QColor(colors().success)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         opt = QStyleOptionViewItem(option)
@@ -118,19 +120,32 @@ class RefsDelegate(QStyledItemDelegate):
 
 class HistoryView(QWidget):
     reload_requested = Signal()
+    load_more = Signal(int)  # skip: number of commits already shown
+    filter_requested = Signal(str)  # empty string clears the filter
+    commit_menu_requested = Signal(object, object)  # (Commit, global QPoint)
+
+    PAGE_SIZE = 1000
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.backend: GitBackend | None = None
         self.commits: list[Commit] = []
+        self.has_more = False
+        self.loading_more = False
+        self.max_lanes = 1
+        self.filtered = False
 
         self.all_refs = QCheckBox("All branches")
         self.all_refs.toggled.connect(lambda _on: self.reload_requested.emit())
+        self.filter_edit = QLineEdit(placeholderText="Filter commits: message text, author:name, or a SHA")
+        self.filter_edit.setClearButtonEnabled(True)
+        self.filter_edit.returnPressed.connect(lambda: self.filter_requested.emit(self.filter_edit.text().strip()))
+        self.filter_edit.textChanged.connect(lambda t: not t and self.filtered and self.filter_requested.emit(""))
         self.count_label = QLabel()
         self.count_label.setStyleSheet("color: palette(placeholder-text);")
         bar = QHBoxLayout()
         bar.addWidget(self.all_refs)
-        bar.addStretch(1)
+        bar.addWidget(self.filter_edit, 1)
         bar.addWidget(self.count_label)
 
         self.table, self.model = make_table(["Graph", "Message", "Author", "When", "Commit"], 1)
@@ -138,9 +153,12 @@ class HistoryView(QWidget):
         self.table.setItemDelegateForColumn(0, GraphDelegate(self.table))
         self.table.setItemDelegateForColumn(1, self.refs_delegate)
         self.table.selectionModel().currentRowChanged.connect(self._on_commit)
+        self.table.verticalScrollBar().valueChanged.connect(self._maybe_load_more)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._context_menu)
         self.diff = DiffView()
 
-        split = QSplitter(Qt.Orientation.Vertical)
+        split = QSplitter(Qt.Orientation.Vertical, objectName="history_split")
         split.addWidget(self.table)
         split.addWidget(self.diff)
         split.setSizes([340, 400])
@@ -154,12 +172,55 @@ class HistoryView(QWidget):
         self.model.removeRows(0, self.model.rowCount())
         self.diff.clear()
 
+    def _context_menu(self, pos) -> None:
+        index = self.table.indexAt(pos)
+        if index.isValid() and index.row() < len(self.commits):
+            self.table.selectRow(index.row())
+            self.commit_menu_requested.emit(self.commits[index.row()], self.table.viewport().mapToGlobal(pos))
+
+    def show_filtered(self, commits: list[Commit], query: str) -> None:
+        self.populate(commits, list(self.refs_delegate.remotes))
+        self.filtered = True
+        self.has_more = False
+        self.count_label.setText(f"{len(commits)} matching “{query}”")
+
     def populate(self, commits: list[Commit], remotes: list[str]) -> None:
+        self.filtered = False
         selected_sha = self.commits[self.table.currentIndex().row()].sha if self.table.currentIndex().isValid() else None
-        self.commits = commits
+        self.commits = []
+        self.max_lanes = 1
         self.refs_delegate.remotes = set(remotes)
-        rows = layout(commits)
         self.model.removeRows(0, self.model.rowCount())
+        self._append_rows(commits)
+        target = next((n for n, c in enumerate(commits) if c.sha == selected_sha), 0)
+        if commits:
+            self.table.selectRow(target)
+
+    def append(self, commits: list[Commit]) -> None:
+        """Add the next page below the rows already shown, keeping scroll and selection."""
+        self.loading_more = False
+        self._append_rows(commits)
+
+    def select_sha(self, sha: str) -> bool:
+        for n, c in enumerate(self.commits):
+            if c.sha == sha:
+                self.table.selectRow(n)
+                self.table.scrollTo(self.model.index(n, 0))
+                return True
+        return False
+
+    def _maybe_load_more(self, value: int) -> None:
+        bar = self.table.verticalScrollBar()
+        if self.has_more and not self.loading_more and value >= bar.maximum() - 20:
+            self.loading_more = True
+            self.load_more.emit(len(self.commits))
+
+    def _append_rows(self, commits: list[Commit]) -> None:
+        start = len(self.commits)
+        self.commits = self.commits + commits
+        self.has_more = len(commits) >= self.PAGE_SIZE
+        # The layout is sequential, so earlier rows come out identical; only new rows are added.
+        rows = layout(self.commits)[start:]
         for commit, graph in zip(commits, rows):
             graph_item = item("")
             graph_item.setData(graph, GRAPH_ROLE)
@@ -172,14 +233,13 @@ class HistoryView(QWidget):
                 item(relative_time(commit.date), tooltip=commit.date.strftime("%Y-%m-%d %H:%M")),
                 item(commit.short_sha, tooltip=commit.sha),
             ])
-        lanes = max((g.width for g in rows), default=1)
+        self.max_lanes = max([self.max_lanes] + [g.width for g in rows])
         self.table.horizontalHeader().setSectionResizeMode(0, self.table.horizontalHeader().ResizeMode.Fixed)
-        self.table.setColumnWidth(0, max(16 + lanes * LANE_WIDTH, 52))
-        self.count_label.setText(f"{len(commits)} commits")
-        target = next((n for n, c in enumerate(commits) if c.sha == selected_sha), 0)
-        if commits:
-            self.table.selectRow(target)
+        self.table.setColumnWidth(0, max(16 + self.max_lanes * LANE_WIDTH, 52))
+        more = "+" if self.has_more else ""
+        self.count_label.setText(f"{len(self.commits)}{more} commits")
 
     def _on_commit(self, current, _previous) -> None:
         if current.isValid() and self.backend and current.row() < len(self.commits):
-            self.diff.show_diff(self.backend.commit_diff(self.commits[current.row()].sha))
+            backend, sha = self.backend, self.commits[current.row()].sha
+            self.diff.show_async(lambda: backend.commit_diff(sha))

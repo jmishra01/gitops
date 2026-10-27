@@ -7,16 +7,18 @@ from PySide6.QtGui import QBrush, QColor, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView
 
 from gitops.core.models import ChangeKind
+from gitops.ui.theme import colors
 
+# Semantic color names, resolved against the active theme when an item is built.
 KIND_COLORS = {
-    ChangeKind.CREATED: "#1a7f37",
-    ChangeKind.ADDED: "#1a7f37",
-    ChangeKind.MODIFIED: "#9a6700",
-    ChangeKind.CHANGED: "#9a6700",
-    ChangeKind.RENAMED: "#0969da",
-    ChangeKind.COPIED: "#0969da",
-    ChangeKind.DELETED: "#cf222e",
-    ChangeKind.REMOVED: "#cf222e",
+    ChangeKind.CREATED: "success",
+    ChangeKind.ADDED: "success",
+    ChangeKind.MODIFIED: "warning",
+    ChangeKind.CHANGED: "warning",
+    ChangeKind.RENAMED: "accent",
+    ChangeKind.COPIED: "accent",
+    ChangeKind.DELETED: "danger",
+    ChangeKind.REMOVED: "danger",
 }
 
 
@@ -40,7 +42,7 @@ def item(text: str, data=None, tooltip: str | None = None) -> QStandardItem:
 
 def kind_item(kind: ChangeKind) -> QStandardItem:
     it = item(kind.value)
-    it.setForeground(QBrush(QColor(KIND_COLORS.get(kind, "#57606a"))))
+    it.setForeground(QBrush(QColor(getattr(colors(), KIND_COLORS.get(kind, "muted")))))
     font = it.font()
     font.setBold(True)
     it.setFont(font)

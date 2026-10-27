@@ -39,18 +39,27 @@ class Task(QRunnable):
     def cancelled(self) -> bool:
         return self._cancelled.is_set()
 
+    def _emit(self, signal_name: str, *args: Any) -> bool:
+        """Emit unless the owner (and with it our signals object) is already gone."""
+        try:
+            getattr(self.signals, signal_name).emit(*args)
+            return True
+        except RuntimeError:  # C++ object deleted: the window closed mid-task
+            self._cancelled.set()
+            return False
+
     def run(self) -> None:
         try:
             out = self.fn(*self.args, **self.kwargs)
             if inspect.isgenerator(out):
                 self._drain(out)
             elif not self.cancelled:
-                self.signals.result.emit(out)
+                self._emit("result", out)
         except Exception as exc:  # surfaced in the UI, never crashes the app
             if not self.cancelled:
-                self.signals.error.emit(str(exc))
+                self._emit("error", str(exc))
         finally:
-            self.signals.finished.emit()
+            self._emit("finished")
 
     def _drain(self, gen) -> None:
         batch: list[Any] = []
@@ -61,10 +70,11 @@ class Task(QRunnable):
                     return
                 batch.append(item)
                 if time.monotonic() - last_emit >= self.BATCH_INTERVAL:
-                    self.signals.items.emit(batch)
+                    if not self._emit("items", batch):
+                        return
                     batch, last_emit = [], time.monotonic()
             if batch:
-                self.signals.items.emit(batch)
+                self._emit("items", batch)
         finally:
             gen.close()  # kills the git process if we stopped early
 
@@ -76,10 +86,18 @@ class TaskRunner(QObject):
         self._active: set[Task] = set()
 
     def submit(self, task: Task) -> Task:
+        # Parenting the signals object to the runner (owned by the window) means
+        # Qt discards queued results, and their connections, if the window goes
+        # away before the task finishes.
+        task.signals.setParent(self)
         self._active.add(task)
-        task.signals.finished.connect(lambda: self._active.discard(task))
+        task.signals.finished.connect(lambda: self._finished(task))
         self.pool.start(task)
         return task
+
+    def _finished(self, task: Task) -> None:
+        self._active.discard(task)
+        task.signals.deleteLater()
 
     def cancel_all(self) -> None:
         for task in list(self._active):

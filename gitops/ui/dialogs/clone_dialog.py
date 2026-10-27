@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
+from gitops.ui.theme import colors
+
 
 def repo_name_from_url(url: str) -> str:
     name = re.split(r"[/:]", url.rstrip("/"))[-1]
@@ -35,7 +37,7 @@ class CloneDialog(QDialog):
         self.name = QLineEdit()
         self.name.textEdited.connect(lambda _t: setattr(self, "_name_edited", True))
         self.error = QLabel()
-        self.error.setStyleSheet("color: #cf222e;")
+        self.error.setStyleSheet(f"color: {colors().danger};")
 
         where = QHBoxLayout()
         where.addWidget(self.parent_dir, 1)
