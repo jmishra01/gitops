@@ -91,6 +91,21 @@ def test_stage_selected_line_and_commit(window, repo, qtbot):
     assert changes.staged_paths() == [] and changes.unstaged_paths() == ["auth.py"]
 
 
+def test_opening_a_subfolder_shows_and_stages_top_level_files(window, repo, qtbot):
+    repo.write("docs/readme.md", "docs\n")
+    repo.commit("add docs")
+    repo.write("auth.py", "def oauth(user):\n    return token\n")
+    window.open_repo(str(repo.path / "docs"))
+    changes = window.changes
+    qtbot.waitUntil(lambda: changes.unstaged_paths() == ["auth.py"], timeout=5000)
+
+    assert changes.select_file("auth.py", staged=False)
+    assert "+    return token" in changes.current_text()
+    tick_line(changes, "+    return token")
+    changes.apply_selected_lines()
+    assert changes.staged_paths() == ["auth.py"]
+
+
 def test_create_branch_shows_on_branches_page(window, qtbot):
     window.backend.create_branch("feature/x")
     window.refresh()

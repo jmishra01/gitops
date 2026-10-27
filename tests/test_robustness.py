@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from gitops.core import GitBackend
+from gitops.core import GitBackend, GitError
 from gitops.core.git_backend import _english_env, _messages_need_english
 
 # ---------------------------------------------------------------- locale
@@ -102,6 +102,41 @@ def test_untracked_preview_reads_only_the_start(repo, backend):
 def test_untracked_binary_preview_reports_size(repo, backend):
     (repo.path / "blob.bin").write_bytes(b"\0" * 1000)
     assert backend.untracked_preview("blob.bin") == "New binary file blob.bin (1,000 bytes)"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need extra privileges on Windows")
+def test_untracked_symlink_preview_shows_the_link(repo, backend):
+    (repo.path / "folder").mkdir()
+    (repo.path / "folder" / "inside.txt").write_text("x\n")
+    os.symlink("folder", repo.path / "to-dir")
+    os.symlink("missing", repo.path / "dangling")
+    os.symlink("a.txt", repo.path / "to-file")
+    assert backend.untracked_preview("to-dir") == "New symlink to-dir\n\n+folder"
+    assert backend.untracked_preview("dangling") == "New symlink dangling\n\n+missing"
+    assert backend.untracked_preview("to-file") == "New symlink to-file\n\n+a.txt"  # not a.txt's content
+
+
+# ---------------------------------------------------------------- opened on a subfolder
+
+
+def test_backend_opened_on_a_subfolder_works_from_the_top_level(repo, backend):
+    repo.write("sub/x.txt", "x\n")
+    repo.commit("add sub")
+    repo.write("a.txt", "changed\n")
+    sub = GitBackend(repo.path / "sub")
+    assert [s.path for s in sub.status()] == ["a.txt"]
+    assert "+changed" in sub.file_diff("a.txt", staged=False)
+    sub.stage("a.txt")
+    assert "+changed" in sub.file_diff("a.txt", staged=True)
+    assert len(sub.blame("sub/x.txt")) == 1
+
+
+def test_stash_before_first_commit_explains_why(tmp_path):
+    empty = GitBackend.init(tmp_path / "empty")
+    (tmp_path / "empty" / "f").write_text("1")
+    empty.stage("f")
+    with pytest.raises(GitError, match="before the first commit"):
+        empty.stash_save("x")
 
 
 # ---------------------------------------------------------------- .gitignore bytes

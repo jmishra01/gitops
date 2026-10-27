@@ -43,6 +43,24 @@ def test_submodules_listed_with_state(tmp_path, repo, backend):
     assert backend.submodules()[0].state == "not initialized"
 
 
+@pytest.mark.parametrize("path", ["my lib", "x (y)"])
+def test_submodule_path_with_spaces_and_parentheses(tmp_path, repo, backend, path):
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    identity = ["-c", "user.name=A", "-c", "user.email=a@example.com"]
+    for args in (["init", "-q", "-b", "main"], [*identity, "commit", "-q", "--allow-empty", "-m", "lib"]):
+        subprocess.run(["git", "-C", str(lib), *args], check=True)
+    repo.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(lib), path)
+    repo.commit("add submodule")
+
+    (sub,) = backend.submodules()
+    assert sub.path == path and sub.describe == "heads/main"
+
+    repo.git("submodule", "deinit", "-q", "-f", path)  # no describe text at all now
+    (sub,) = backend.submodules()
+    assert sub.path == path and sub.state == "not initialized"
+
+
 def test_no_submodules(backend):
     assert backend.submodules() == []
 

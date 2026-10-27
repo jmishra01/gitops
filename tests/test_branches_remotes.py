@@ -83,6 +83,19 @@ def test_clone_fetch_pull_and_track_remote_branch(tmp_path, repo, backend, remot
     assert other.current_branch() == "feature"
 
 
+def test_checkout_remote_branch_of_remote_with_slash(tmp_path, repo, backend, remote):
+    backend.create_branch("feature")
+    list(backend.push())
+    clone_dir = tmp_path / "clone"
+    list(GitBackend.clone(str(remote), clone_dir))
+    other = GitBackend(clone_dir)
+    other.run("remote", "add", "team/x", str(remote))
+    list(other.fetch("team/x"))
+
+    assert other.checkout_remote("team/x/feature") == "feature"
+    assert other.current_branch() == "feature"
+
+
 def test_push_without_remote_errors(backend):
     with pytest.raises(GitError, match="no remote"):
         list(backend.push())

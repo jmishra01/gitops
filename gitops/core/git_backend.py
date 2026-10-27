@@ -164,6 +164,9 @@ class GitBackend:
         # Called with each git command's arguments (the UI's git console shows them).
         self.command_listeners: list[Callable[[list[str]], None]] = []
         self.root = Path(self.run("rev-parse", "--show-toplevel").strip())
+        # git status reports paths from the top level, so every later command must run there
+        # too: opened on a subfolder, `diff`/`add`/`blame` would read those paths relative to it.
+        self.repo_path = self.root
 
     @staticmethod
     def is_repo(path: str | os.PathLike[str]) -> bool:
@@ -476,6 +479,8 @@ class GitBackend:
     def untracked_preview(self, path: str) -> str:
         """Preview of a new file, reading at most PREVIEW_BYTES so huge files can't stall the UI."""
         target = self.root / path
+        if target.is_symlink():  # git stores the link itself, not what it points to (which may not exist)
+            return f"New symlink {path}\n\n+{os.readlink(target)}"
         size = target.stat().st_size
         with target.open("rb") as handle:
             data = handle.read(self.PREVIEW_BYTES)
@@ -570,7 +575,9 @@ class GitBackend:
 
     def checkout_remote(self, remote_branch: str) -> str:
         """Create a local tracking branch for e.g. 'origin/feature' and switch to it."""
-        local = remote_branch.split("/", 1)[1]
+        # Remote names may contain "/" themselves (e.g. "team/x"), so strip the longest one that matches.
+        remote = max((r for r in self.remotes() if remote_branch.startswith(r + "/")), key=len, default=None)
+        local = remote_branch.removeprefix(remote + "/") if remote else remote_branch.split("/", 1)[1]
         self.run("switch", "-q", "--track", "-c", local, remote_branch)
         return local
 
@@ -706,6 +713,8 @@ class GitBackend:
 
     def stash_save(self, message: str = "", include_untracked: bool = False, keep_index: bool = False) -> bool:
         """Stash local changes. Returns False when there was nothing to stash."""
+        if not self.has_commits():  # git refuses, and with -q it says nothing about why
+            raise GitError(["stash", "push"], 1, "You can't stash before the first commit. Commit something first.")
         before = len(self.stashes())
         args = ["stash", "push", "-q"]
         if include_untracked:
@@ -911,15 +920,29 @@ class GitBackend:
         if not (self.root / ".gitmodules").exists():
             return []
         out = self.run("submodule", "status")
+        # Paths may contain spaces and parentheses, so they can't be split out of the status
+        # line; match them against the paths .gitmodules declares instead (longest first).
+        config = self.run_raw("config", "-z", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$")
+        known = sorted(
+            (
+                rec.split("\n", 1)[1]
+                for rec in config.stdout.decode("utf-8", errors="replace").split("\0")
+                if "\n" in rec
+            ),
+            key=len,
+            reverse=True,
+        )
         states = {" ": "ok", "-": "not initialized", "+": "modified", "U": "conflict"}
         result: list[Submodule] = []
         for line in out.split("\n"):
             if not line:
                 continue
-            flag, rest = line[0], line[1:]
-            parts = rest.split(" ", 2)
-            describe = parts[2].strip("()") if len(parts) > 2 else ""
-            result.append(Submodule(path=parts[1], sha=parts[0], state=states.get(flag, "ok"), describe=describe))
+            flag, (sha, _, rest) = line[0], line[1:].partition(" ")
+            path = next((p for p in known if rest == p or rest.startswith(p + " (")), None)
+            if path is None:  # not declared in .gitmodules: fall back to "path (describe)"
+                path = rest.rsplit(" (", 1)[0] if rest.endswith(")") else rest
+            describe = rest[len(path) :].strip().removeprefix("(").removesuffix(")")
+            result.append(Submodule(path=path, sha=sha, state=states.get(flag, "ok"), describe=describe))
         return result
 
     def update_submodules(self) -> Iterator[str]:
