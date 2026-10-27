@@ -221,7 +221,7 @@ class HistoryView(QWidget):
         self.has_more = len(commits) >= self.PAGE_SIZE
         # The layout is sequential, so earlier rows come out identical; only new rows are added.
         rows = layout(self.commits)[start:]
-        for commit, graph in zip(commits, rows):
+        for commit, graph in zip(commits, rows, strict=True):
             graph_item = item("")
             graph_item.setData(graph, GRAPH_ROLE)
             subject = item(commit.subject, tooltip=commit.subject)

@@ -89,8 +89,16 @@ class DiffView(QPlainTextEdit):
         if generation == self._generation:
             self.show_diff(text, match)
 
+    # Beyond this, laying out and highlighting the text would freeze the window.
+    MAX_CHARS = 2_000_000
+
     def show_diff(self, text: str, match: re.Pattern[str] | None = None) -> None:
         self.highlighter.match_pattern = match
+        if len(text) > self.MAX_CHARS:
+            cut = text.rfind("\n", 0, self.MAX_CHARS)
+            text = text[: cut if cut > 0 else self.MAX_CHARS] + (
+                f"\n\n… diff truncated: showing {self.MAX_CHARS // 1_000_000} MB of {len(text) / 1_000_000:.1f} MB"
+            )
         self.setPlainText(text)
         if match:
             found = match.search(text)

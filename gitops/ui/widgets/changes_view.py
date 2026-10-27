@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from PySide6.QtCore import Qt, Signal
@@ -25,9 +27,23 @@ from gitops.core.encoding import display_text
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import FileStatus
 from gitops.core.patch import FilePatch, build_partial_patch, parse_file_patch
+from gitops.services.task_runner import Task, TaskRunner
 from gitops.ui.dialogs.conflict_editor import ConflictEditor
 from gitops.ui.theme import colors
 from gitops.ui.widgets.diff_view import DiffView
+
+@dataclass(frozen=True)
+class WorkingState:
+    statuses: list[FileStatus]
+    operation: str | None
+    merge_message: str
+
+
+def load_state(backend: GitBackend) -> WorkingState:
+    """Everything the Changes tab shows, gathered in one go (safe to run on a worker thread)."""
+    operation = backend.operation_in_progress()
+    return WorkingState(backend.status(), operation, backend.merge_message() if operation == "merge" else "")
+
 
 STATUS_COLORS = {"M": "warning", "A": "success", "?": "success", "D": "danger", "R": "accent", "C": "accent", "U": "danger"}
 PATH_ROLE = Qt.ItemDataRole.UserRole
@@ -49,6 +65,8 @@ class ChangesView(QWidget):
         self.current_letter = ""
         self.conflicts: list[str] = []
         self.operation: str | None = None  # merge, rebase, cherry-pick or revert in progress
+        self.merge_message = ""
+        self._generation = 0  # bumped by every refresh; stale background results are dropped
 
         self.banner = QFrame()
         self.banner.setFrameShape(QFrame.Shape.StyledPanel)
@@ -179,15 +197,43 @@ class ChangesView(QWidget):
     # ------------------------------------------------------------------ status
 
     def refresh(self) -> int:
-        """Reload status; returns the number of changed files."""
+        """Reload status now (right after the user's own action); returns the number of changed files."""
+        self._generation += 1
         if not self.backend:
             self.unstaged.clear()
             self.staged.clear()
             return 0
         try:
-            statuses = self.backend.status()
+            state = load_state(self.backend)
         except GitError:
             return 0
+        return self._apply_state(state)
+
+    def refresh_async(self, runner: TaskRunner, on_done: Callable[[int], None] | None = None) -> None:
+        """Reload status in the background (e.g. when the window regains focus).
+
+        A result is dropped if a newer refresh, sync or async, started after it,
+        so a slow background status can't overwrite what the user just did.
+        """
+        if not self.backend:
+            return
+        self._generation += 1
+        generation, backend = self._generation, self.backend
+
+        def apply(state: WorkingState) -> None:
+            if generation == self._generation and backend is self.backend:
+                count = self._apply_state(state)
+                if on_done:
+                    on_done(count)
+
+        task = Task(load_state, backend)
+        task.signals.result.connect(apply)
+        runner.submit(task)
+
+    def _apply_state(self, state: WorkingState) -> int:
+        statuses = state.statuses
+        self.operation = state.operation
+        self.merge_message = state.merge_message
         keep = self.current
         for lst in (self.unstaged, self.staged):
             lst.blockSignals(True)
@@ -256,7 +302,11 @@ class ChangesView(QWidget):
         try:
             if letter == "U":
                 target = self.backend.root / path
-                body = target.read_text(errors="replace") if target.is_file() else "(deleted on one side)"
+                if target.is_file():
+                    with target.open("rb") as handle:
+                        body = handle.read(self.backend.PREVIEW_BYTES).decode("utf-8", errors="replace")
+                else:
+                    body = "(deleted on one side)"
                 text = f"Conflicted file {path}. Double-click it or press Resolve conflicts…\n\n{body}"
                 self.patch = None
             elif letter == "?":
@@ -264,7 +314,8 @@ class ChangesView(QWidget):
                 self.patch = None
             else:
                 text = self.backend.file_diff(path, staged)
-                self.patch = parse_file_patch(text)
+                # A diff too big to show in full can't be mapped to selections; stage it as a whole file.
+                self.patch = parse_file_patch(text) if len(text) <= self.diff.MAX_CHARS else None
         except (GitError, OSError) as exc:
             text, self.patch = f"Couldn't show this file: {exc}", None
         self.file_label.setText(f"{'Staged' if staged else 'Unstaged'} · {path}")
@@ -438,7 +489,6 @@ class ChangesView(QWidget):
         if not self.backend:
             self.banner.hide()
             return
-        self.operation = self.backend.operation_in_progress()
         if not self.operation and not self.conflicts:
             self.banner.hide()
             return
@@ -448,9 +498,9 @@ class ChangesView(QWidget):
             else "All conflicts resolved. "
         )
         if self.operation == "merge":
-            subject = self.backend.merge_message().split("\n", 1)[0]
+            subject = self.merge_message.split("\n", 1)[0]
             if not self.message.toPlainText().strip():
-                self.message.setPlainText(self.backend.merge_message())
+                self.message.setPlainText(self.merge_message)
             text = f"<b>Merging</b> · {subject}<br>{left}commit to finish the merge."
         elif self.operation:
             name = {"rebase": "Rewriting history (rebase)", "cherry-pick": "Cherry-picking", "revert": "Reverting"}[self.operation]

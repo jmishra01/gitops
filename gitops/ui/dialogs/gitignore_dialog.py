@@ -7,10 +7,12 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QVBoxLayout,
 )
 
+from gitops.core.encoding import pick_encoding
 from gitops.core.git_backend import GitBackend
 from gitops.ui.theme import colors
 
@@ -25,7 +27,12 @@ class GitignoreDialog(QDialog):
         self.resize(640, 560)
         self.editor = QPlainTextEdit()
         self.editor.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.editor.setPlainText(backend.read_gitignore())
+        path = backend.gitignore_path()
+        self.original = path.read_bytes() if path.exists() else b""
+        # Same rule as the conflict editor: UTF-8 if possible, otherwise Latin-1, which keeps every byte.
+        self.encoding = pick_encoding(self.original)
+        self.crlf = b"\r\n" in self.original
+        self.editor.setPlainText(self.original.decode(self.encoding).replace("\r\n", "\n"))
         self.editor.setPlaceholderText("build/\n*.log\n.env")
         self.test_path = QLineEdit(placeholderText="Test a path, e.g. build/output.o")
         self.test_path.textChanged.connect(self._test)
@@ -61,5 +68,19 @@ class GitignoreDialog(QDialog):
             self.result.setText("Not ignored")
 
     def _save(self) -> None:
-        self.backend.write_gitignore(self.editor.toPlainText())
+        text = self.editor.toPlainText()
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if self.crlf:
+            text = text.replace("\n", "\r\n")
+        try:
+            data = text.encode(self.encoding)
+        except UnicodeEncodeError as exc:
+            QMessageBox.warning(
+                self,
+                "Can't save these characters",
+                f"“{exc.object[exc.start:exc.end]}” can't be stored in this file's encoding ({self.encoding}).",
+            )
+            return
+        self.backend.gitignore_path().write_bytes(data)
         self.accept()

@@ -96,7 +96,7 @@ def test_create_branch_shows_in_sidebar(window, qtbot):
     window.backend.create_branch("feature/x")
     window.refresh()
     qtbot.waitUntil(lambda: window.sidebar.topLevelItem(0).childCount() == 2, timeout=5000)
-    assert "feature/x" in window.branch_label.text()
+    qtbot.waitUntil(lambda: "feature/x" in window.branch_label.text(), timeout=5000)
 
 
 def test_push_through_network_runner(window, tmp_path, qtbot):
@@ -106,7 +106,7 @@ def test_push_through_network_runner(window, tmp_path, qtbot):
 
     window.push_act.trigger()
     qtbot.waitUntil(lambda: window.network_task is None and window.push_act.isEnabled(), timeout=10000)
-    assert "↑0 ↓0" in window.branch_label.text()
+    qtbot.waitUntil(lambda: "↑0 ↓0" in window.branch_label.text(), timeout=5000)
 
 
 # ---------------------------------------------------------------- v0.2 flows

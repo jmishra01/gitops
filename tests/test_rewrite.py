@@ -1,7 +1,7 @@
 import pytest
 
 from gitops.core import GitBackend
-from gitops.core.rebase import RebaseStep, build_todo, has_merges, rebase_plan, run_interactive_rebase
+from gitops.core.rebase import build_todo, has_merges, rebase_plan, run_interactive_rebase
 
 
 @pytest.fixture

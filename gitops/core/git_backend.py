@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 
 from gitops.core.encoding import decode_lossless, encode_lossless
@@ -37,6 +38,59 @@ US = "\x1f"
 _BASE_ARGS = ("-c", "core.quotepath=off", "-c", "color.ui=never")
 # Network commands must never block on a terminal prompt the GUI can't answer.
 _NETWORK_ENV = {"GIT_TERMINAL_PROMPT": "0"}
+
+
+def _messages_need_english(environ: Mapping[str, str]) -> bool:
+    """Would git print translated (non-English) messages with this environment?"""
+    locale = environ.get("LC_ALL") or environ.get("LC_MESSAGES") or environ.get("LANG") or ""
+    base = locale.split(".")[0]
+    if base in ("", "C", "POSIX"):
+        return False  # gettext ignores LANGUAGE under the C locale
+    language = environ.get("LANGUAGE", "")
+    return not base.startswith("en") or any(part and not part.startswith("en") for part in language.split(":"))
+
+
+def _english_env(environ: Mapping[str, str]) -> dict[str, str]:
+    """`environ` with git's messages forced to English and character handling left alone.
+
+    The UI recognises some outcomes by git's wording ("not fully merged",
+    "rejected", ...). LC_ALL is split into LC_CTYPE rather than overridden so
+    non-ASCII searches and paths still behave as in the user's locale.
+    """
+    env = dict(environ)
+    lc_all = env.pop("LC_ALL", None)
+    if lc_all and "LC_CTYPE" not in env:
+        env["LC_CTYPE"] = lc_all
+    env.pop("LANGUAGE", None)
+    env["LC_MESSAGES"] = "C"
+    return env
+
+
+# Decided once: forcing the locale costs git ~10 ms per call (it loads its
+# translations), so it's only done when the user's locale isn't English already.
+_BASE_ENV: dict[str, str] | None = _english_env(os.environ) if _messages_need_english(os.environ) else None
+
+
+def _git_env(extra: dict[str, str] | None = None) -> dict[str, str] | None:
+    """Environment for every git process; None means "inherit unchanged" (the fast path)."""
+    if not extra:
+        return _BASE_ENV
+    return {**(_BASE_ENV or os.environ), **extra}
+
+
+# Every git process runs detached from any terminal: no stdin and a new session,
+# so ssh, credential helpers and GPG can't sit waiting on a prompt nobody can
+# see (launched from a terminal, they would otherwise grab it and hang). They
+# fail fast instead, or use a graphical prompt such as ssh-askpass or pinentry-mac.
+_DETACHED = {"start_new_session": True}
+
+
+def _kill(proc: subprocess.Popen[bytes]) -> None:
+    """Stop git and everything it started (ssh, remote helpers) in its session."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (AttributeError, ProcessLookupError, PermissionError, OSError):  # Windows, or already gone
+        proc.kill()
 _PROGRESS_SPLIT = re.compile(rb"[\r\n]")
 # diff3 markers include the common ancestor, so the conflict editor can offer "use base".
 _DIFF3 = ("-c", "merge.conflictStyle=diff3")
@@ -85,7 +139,7 @@ def _progress_lines(proc: subprocess.Popen[bytes], args: Sequence[str]) -> Itera
         finished = True
     finally:
         if not finished:
-            proc.kill()
+            _kill(proc)
         proc.stdout.close()
         returncode = proc.wait()
     if returncode != 0:
@@ -106,13 +160,18 @@ class GitBackend:
             ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,
+            env=_git_env(),
+            **_DETACHED,
         )
         return result.returncode == 0 and result.stdout.strip() == "true"
 
     @staticmethod
     def init(path: str | os.PathLike[str]) -> GitBackend:
         Path(path).mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "init", "-q", str(path)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init", "-q", str(path)], check=True, capture_output=True, stdin=subprocess.DEVNULL, env=_git_env()
+        )
         return GitBackend(path)
 
     @staticmethod
@@ -121,9 +180,11 @@ class GitBackend:
         args = ["clone", "--progress", url, str(dest)]
         proc = subprocess.Popen(
             ["git", *_BASE_ARGS, *args],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            env={**os.environ, **_NETWORK_ENV},
+            env=_git_env(_NETWORK_ENV),
+            **_DETACHED,
         )
         yield from _progress_lines(proc, args)
 
@@ -147,7 +208,12 @@ class GitBackend:
         """Run without raising, for commands whose exit code carries meaning."""
         self._log(args)
         return subprocess.run(
-            self._cmd(args), capture_output=True, input=input, env={**os.environ, **env} if env else None
+            self._cmd(args),
+            capture_output=True,
+            input=input,
+            stdin=None if input is not None else subprocess.DEVNULL,
+            env=_git_env(env),
+            **_DETACHED,
         )
 
     def _log(self, args: Sequence[str]) -> None:
@@ -163,8 +229,11 @@ class GitBackend:
         self._log(args)
         proc = subprocess.Popen(
             self._cmd(args),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=_git_env(),
+            **_DETACHED,
         )
         assert proc.stdout is not None
         finished = False
@@ -174,7 +243,7 @@ class GitBackend:
             finished = True
         finally:
             if not finished:
-                proc.kill()
+                _kill(proc)
             proc.stdout.close()
             stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
             if proc.stderr:
@@ -188,9 +257,11 @@ class GitBackend:
         self._log(args)
         proc = subprocess.Popen(
             self._cmd(args),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            env={**os.environ, **_NETWORK_ENV},
+            env=_git_env(_NETWORK_ENV),
+            **_DETACHED,
         )
         yield from _progress_lines(proc, args)
 
@@ -302,12 +373,23 @@ class GitBackend:
             args.append("--cached")
         return decode_lossless(self.run_bytes(*args, "--", path))
 
+    PREVIEW_BYTES = 512 * 1024
+
     def untracked_preview(self, path: str) -> str:
-        data = (self.root / path).read_bytes()
+        """Preview of a new file, reading at most PREVIEW_BYTES so huge files can't stall the UI."""
+        target = self.root / path
+        size = target.stat().st_size
+        with target.open("rb") as handle:
+            data = handle.read(self.PREVIEW_BYTES)
         if b"\0" in data[:8000]:
-            return f"New binary file {path}"
+            return f"New binary file {path} ({size:,} bytes)"
         lines = data.decode("utf-8", errors="replace").splitlines()
-        return f"New file {path}\n\n" + "\n".join("+" + line for line in lines)
+        if size > len(data):
+            lines = lines[:-1]  # the last line was probably cut mid-way
+            note = f"\n\n… showing the first {len(data) // 1024} KB of {size / 1_048_576:.1f} MB"
+        else:
+            note = ""
+        return f"New file {path}\n\n" + "\n".join("+" + line for line in lines) + note
 
     def stage(self, *paths: str) -> None:
         self.run("add", "-A", "--", *paths)
@@ -746,20 +828,22 @@ class GitBackend:
         return self.root / ".gitignore"
 
     def read_gitignore(self) -> str:
+        """The file's text, decoded losslessly: any bytes and line endings survive a write back."""
         path = self.gitignore_path()
-        return path.read_text(errors="replace") if path.exists() else ""
+        return decode_lossless(path.read_bytes()) if path.exists() else ""
 
     def write_gitignore(self, text: str) -> None:
         if text and not text.endswith("\n"):
-            text += "\n"
-        self.gitignore_path().write_text(text)
+            text += "\r\n" if "\r\n" in text else "\n"
+        self.gitignore_path().write_bytes(encode_lossless(text))
 
     def add_ignore_rule(self, rule: str) -> None:
         current = self.read_gitignore()
         if rule in current.splitlines():
             return
-        prefix = "" if not current or current.endswith("\n") else "\n"
-        self.write_gitignore(current + prefix + rule + "\n")
+        eol = "\r\n" if "\r\n" in current else "\n"
+        prefix = "" if not current or current.endswith("\n") else eol
+        self.write_gitignore(current + prefix + rule + eol)
 
     def check_ignore(self, path: str) -> tuple[str, int, str] | None:
         """(source file, line, pattern) of the rule ignoring `path`, or None if it isn't ignored."""
@@ -779,10 +863,16 @@ class GitBackend:
         Runs in a throwaway repo so the user's real .gitignore is never touched.
         """
         with tempfile.TemporaryDirectory(prefix="gitops-ignore-") as tmp:
-            subprocess.run(["git", "init", "-q", tmp], check=True, capture_output=True)
-            Path(tmp, ".gitignore").write_text(rules)
+            subprocess.run(
+                ["git", "init", "-q", tmp], check=True, capture_output=True, stdin=subprocess.DEVNULL, env=_git_env()
+            )
+            Path(tmp, ".gitignore").write_text(rules, errors="surrogateescape")
             proc = subprocess.run(
-                ["git", "-C", tmp, "check-ignore", "-v", "--no-index", "--", path], capture_output=True, text=True
+                ["git", "-C", tmp, "check-ignore", "-v", "--no-index", "--", path],
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                env=_git_env(),
             )
         if proc.returncode != 0:
             return None

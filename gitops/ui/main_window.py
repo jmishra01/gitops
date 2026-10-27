@@ -259,7 +259,7 @@ class MainWindow(QMainWindow):
     def refresh(self) -> None:
         if not self.backend:
             return
-        self._refresh_status()
+        self._refresh_status_async()
         backend, all_refs = self.backend, self.history.all_refs.isChecked()
         page = self.history.PAGE_SIZE
         task = Task(
@@ -281,12 +281,26 @@ class MainWindow(QMainWindow):
         """Cheap refresh: working-tree status and the branch/ahead-behind label."""
         if not self.backend:
             return
-        count = self.changes.refresh()
+        self._set_change_count(self.changes.refresh())
+        self._set_branch_label((self.backend.current_branch(), self.backend.ahead_behind()))
+
+    def _refresh_status_async(self) -> None:
+        """Same as _refresh_status, but every git call runs on a worker thread."""
+        if not self.backend:
+            return
+        self.changes.refresh_async(self.runner, self._set_change_count)
+        backend = self.backend
+        task = Task(lambda: (backend.current_branch(), backend.ahead_behind()))
+        task.signals.result.connect(lambda info, b=backend: b is self.backend and self._set_branch_label(info))
+        self.runner.submit(task)
+
+    def _set_change_count(self, count: int) -> None:
         self.tabs.setTabText(0, f"Changes ({count})" if count else "Changes")
-        branch = self.backend.current_branch() or "detached HEAD"
-        ab = self.backend.ahead_behind()
+
+    def _set_branch_label(self, info) -> None:
+        branch, ab = info
         sync = f"  ↑{ab[0]} ↓{ab[1]}" if ab else "  (no upstream)"
-        self.branch_label.setText(f"  {branch}{sync}  ")
+        self.branch_label.setText(f"  {branch or 'detached HEAD'}{sync}  ")
 
     def _populate(self, backend: GitBackend, data) -> None:
         if backend is not self.backend:
@@ -536,8 +550,21 @@ class MainWindow(QMainWindow):
             hint = ""
             if "rejected" in detail or "non-fast-forward" in detail:
                 hint = "\n\nThe remote has commits you don't have yet. Pull first, then push again."
+            elif "Host key verification failed" in detail:
+                hint = (
+                    "\n\nThis server's SSH host key isn't trusted yet. Connect once from a terminal "
+                    "(for example `ssh -T git@github.com`) to accept it, then try again."
+                )
+            elif "Permission denied (publickey" in detail or "passphrase" in detail.lower():
+                hint = (
+                    "\n\nYour SSH key wasn't available. If it has a passphrase, load it into the agent first "
+                    "(`ssh-add`, or `ssh-add --apple-use-keychain` on macOS); GitOps can't type it for you."
+                )
             elif "Authentication failed" in detail or "could not read Username" in detail or "Permission denied" in detail:
-                hint = "\n\nCheck your credentials or SSH key; GitOps uses the same setup as git in your terminal."
+                hint = (
+                    "\n\nCheck your credentials. For HTTPS, set up a credential helper (e.g. `gh auth setup-git`); "
+                    "GitOps uses the same setup as git in your terminal."
+                )
             QMessageBox.warning(self, f"{title} failed", detail + hint)
         else:
             self.statusBar().showMessage(f"{title} finished", 4000)
@@ -559,7 +586,7 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event) -> None:
         # Pick up edits made in other apps when the user comes back to the window.
         if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow() and self.backend:
-            self._refresh_status()
+            self._refresh_status_async()  # never block the window while git status runs
         super().changeEvent(event)
 
     def _restore_layout(self) -> None:
