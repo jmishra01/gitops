@@ -495,3 +495,11 @@ def test_changes_view_stages_line_in_latin1_file(window, repo):
     tick_line(changes, "+extra")
     changes.apply_selected_lines()
     assert window.backend.run_bytes("show", ":l.txt") == b"caf\xe9 = 1\nline2\nextra\n"
+
+
+def test_help_menu_copies_diagnostics(window, qapp):
+    help_menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "&Help")
+    actions = {a.text(): a for a in help_menu.actions() if a.text()}
+    assert {"Copy diagnostics", "Open log folder", "About GitOps"} <= set(actions)
+    actions["Copy diagnostics"].trigger()
+    assert qapp.clipboard().text().startswith("GitOps ")

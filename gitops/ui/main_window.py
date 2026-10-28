@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSettings, Qt
-from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence
+from PySide6.QtCore import QEvent, QSettings, Qt, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QDockWidget,
@@ -25,6 +25,7 @@ from gitops import __version__
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import Commit, Stash, Submodule, Tag, Worktree
 from gitops.core.rebase import has_merges, rebase_plan, run_interactive_rebase
+from gitops.services import diagnostics
 from gitops.services.task_runner import Task, TaskRunner
 from gitops.ui import theme
 from gitops.ui.dashboard import DashboardWindow
@@ -230,6 +231,9 @@ class MainWindow(QMainWindow):
             theme_menu.addAction(act)
 
         help_menu = self.menuBar().addMenu("&Help")
+        help_menu.addAction(self._action("Copy diagnostics", self._copy_diagnostics))
+        help_menu.addAction(self._action("Open log folder", self._open_log_folder))
+        help_menu.addSeparator()
         help_menu.addAction(self._action("About GitOps", self._about))
 
         # The top bar replaces the old toolbar; everything stays in the menus and the command palette.
@@ -244,6 +248,16 @@ class MainWindow(QMainWindow):
             "About GitOps",
             f"<b>GitOps {__version__}</b><p>A desktop git repository manager built with Python and PySide6.</p>",
         )
+
+    def _copy_diagnostics(self) -> None:
+        QGuiApplication.clipboard().setText(diagnostics.diagnostics_text())
+        self.statusBar().showMessage("Diagnostics copied. Paste them into your bug report.", 5000)
+
+    def _open_log_folder(self) -> None:
+        path = diagnostics.log_file()
+        folder = path.parent if path else diagnostics.log_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def _set_repo_actions_enabled(self, enabled: bool) -> None:
         for action in self.repo_actions:

@@ -2,6 +2,12 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.1 - 2026-10-28
+
+### Added
+- A rotating log file (1 MB, three backups) in the platform's app data folder. It records failed git commands (the subcommand and git's error, never commit messages or file contents), unexpected errors with their traceback, crashes and Qt warnings.
+- **Help › Copy diagnostics** copies the GitOps, Python, Qt, OS and git versions plus the end of the log, ready for a bug report. **Help › Open log folder** shows the log files.
+
 ## 0.3.0 - 2026-10-28
 
 The first numbered release. It covers everything built so far.

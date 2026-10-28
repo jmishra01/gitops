@@ -8,12 +8,17 @@ delivered in small batches as they arrive, and the task can be cancelled).
 from __future__ import annotations
 
 import inspect
+import logging
 import threading
 import time
 from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+
+from gitops.core.git_backend import GitError
+
+log = logging.getLogger(__name__)
 
 
 class TaskSignals(QObject):
@@ -56,6 +61,12 @@ class Task(QRunnable):
             elif not self.cancelled:
                 self._emit("result", out)
         except Exception as exc:  # surfaced in the UI, never crashes the app
+            if isinstance(exc, GitError):
+                # The subcommand only: the full arguments can hold commit messages or paths.
+                subcommand = exc.git_args[0] if exc.git_args else "?"
+                log.warning("git %s failed (%s): %s", subcommand, exc.returncode, exc.stderr[:500])
+            else:
+                log.exception("Background task %s failed", getattr(self.fn, "__qualname__", self.fn))
             if not self.cancelled:
                 self._emit("error", str(exc))
         finally:
