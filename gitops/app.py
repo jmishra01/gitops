@@ -17,6 +17,9 @@ ICON = Path(__file__).parent / "resources" / "gitops.png"
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
+    if argv[1:] == ["--version"]:  # used by the release workflow to smoke-test a build
+        print(f"GitOps {__version__}")
+        return 0
     app = QApplication(argv)
     app.setApplicationName("GitOps")
     app.setOrganizationName("gitops")

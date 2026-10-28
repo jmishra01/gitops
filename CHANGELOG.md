@@ -2,6 +2,16 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.4 - 2026-10-28
+
+### Added
+- **Release builds:** pushing a `v*` tag builds GitOps on macOS (Apple silicon), Windows and Linux, checks each build starts, and publishes a GitHub release with the zips and tarball attached and this changelog's section as its notes. The builds are unsigned for now.
+- `scripts/release_info.py` stops a release whose tag doesn't match the version in the code or that has no CHANGELOG entry.
+- `gitops --version` prints the version and exits.
+
+### Fixed
+- The macOS build reports `dist/GitOps.app` as its output instead of the staging folder.
+
 ## 0.3.3 - 2026-10-28
 
 ### Added

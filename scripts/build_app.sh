@@ -40,4 +40,4 @@ if [[ "$(uname -s)" == Linux ]]; then
   echo "and dist/GitOps/gitops.png to ~/.local/share/icons/hicolor/512x512/apps/, and put dist/GitOps on PATH."
 fi
 
-echo "Built: $(ls -d dist/GitOps.app dist/GitOps 2>/dev/null | head -1)"
+if [[ -d dist/GitOps.app ]]; then echo "Built: dist/GitOps.app"; else echo "Built: dist/GitOps"; fi

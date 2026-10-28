@@ -1,0 +1,109 @@
+name: Release
+
+# Push a tag like v0.3.4 to build GitOps on macOS, Windows and Linux and publish a GitHub
+# release with the builds attached. The builds are unsigned for now.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.info.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Fails unless the tag is v<version in gitops/__init__.py> and CHANGELOG.md has that section.
+      - id: info
+        run: echo "version=$(python scripts/release_info.py "$GITHUB_REF_NAME" --notes-out notes.md)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes
+          path: notes.md
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-latest # Apple silicon
+            asset: GitOps-${{ needs.check.outputs.version }}-macos-arm64.zip
+          - os: windows-latest
+            asset: GitOps-${{ needs.check.outputs.version }}-windows-x64.zip
+          # The oldest supported Ubuntu, so the build runs on distributions with an older glibc.
+          - os: ubuntu-22.04
+            asset: GitOps-${{ needs.check.outputs.version }}-linux-x64.tar.gz
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      # Qt needs these shared libraries to load, which PyInstaller does while it collects them.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: scripts/build_app.sh
+
+      # Smoke test: the frozen app imports everything and reports the tagged version.
+      - if: runner.os == 'macOS'
+        run: test "$(dist/GitOps.app/Contents/MacOS/GitOps --version)" = "GitOps ${{ needs.check.outputs.version }}"
+      - if: runner.os == 'Linux'
+        run: test "$(dist/GitOps/GitOps --version)" = "GitOps ${{ needs.check.outputs.version }}"
+      # A windowed .exe has no console to print to, so only its exit code is checked.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/GitOps/GitOps.exe -ArgumentList "--version" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+
+      # ditto keeps the symlinks and permissions inside the .app.
+      - if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/GitOps.app "${{ matrix.asset }}"
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/GitOps -DestinationPath "${{ matrix.asset }}"
+      - if: runner.os == 'Linux'
+        run: tar -czf "${{ matrix.asset }}" -C dist GitOps
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+          compression-level: 0 # already compressed
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "GitOps ${{ needs.check.outputs.version }}" \
+            --notes-file assets/notes.md \
+            assets/GitOps-*
