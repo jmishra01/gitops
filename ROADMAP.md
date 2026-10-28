@@ -3,51 +3,90 @@
 ## Where the project stands
 
 - **What's built:** a staging workbench, history with a lane graph, branches, stashes, a file inspector, blame, search across history, a conflict resolver, interactive rebase, undo from the reflog, and a dashboard for many repos.
+- **Done since the last roadmap:** GitHub Actions run ruff and pytest on macOS, Windows and Linux, and `pyproject.toml` has a `[tool.ruff]` config.
 - **Gaps in the basics:**
-  - `pyproject.toml` still says `0.1.0`, although commit messages call this work v0.3.
-  - There's no CI, no lint config (no `[tool.ruff]` section), and no logging.
-- **Hotspots:** `gitops/core/git_backend.py` (~1,050 lines, 96 methods), `gitops/ui/main_window.py` (~990) and `gitops/ui/dialogs/conflict_editor.py` (~910) are the files that will slow down future changes.
+  - `pyproject.toml` still says `0.1.0`, although commit messages call this work v0.3. There's no `CHANGELOG.md` and no tagged release.
+  - The build has no app icon (`icon=None`), no signing and no installer, and the app has no logging.
+- **Hotspots:** `gitops/core/git_backend.py` (~1,090 lines), `gitops/ui/main_window.py` (~1,030) and `gitops/ui/dialogs/conflict_editor.py` (~960) are the files that will slow down future changes.
 - **Scaling risks:**
   - History loads pages with `--skip`, so each later page costs more on large repos.
   - The app only refreshes when the window is re-activated, so changes made in a terminal or editor don't show up until then.
 
-## Phase 1: Harden and release
+## Direction
 
-1. Commit the Windows `CREATE_NO_WINDOW` fix, then run the test suite on Windows and Linux too.
-2. Add GitHub Actions: pytest offscreen on macOS, Windows and Ubuntu with Python 3.11 and 3.12, plus `ruff check` and `ruff format --check`.
-3. Add a ruff config and a pre-commit hook, and consider `mypy` on `gitops/core` only.
-4. Set up versioning: bump to `0.3.0`, keep a single source for the version, add `CHANGELOG.md` and tag releases.
-5. Add packaging polish: an app icon (the `.spec` has `icon=None`), macOS codesign and notarization, a Windows installer, and builds uploaded as CI release artifacts.
-6. Add logging to a rotating file under the platform's app data folder, and a "Copy diagnostics" item under Help.
+GitOps is the git client that makes history and risky operations safe and easy to understand. Search across history, the conflict resolver and undo from the reflog are what set it apart; each release builds on them instead of matching other clients feature for feature.
 
-## Phase 2: Performance and refresh
+## v0.3: Ship it
+
+1. Set up versioning: bump to `0.3.0`, keep a single source for the version, add `CHANGELOG.md` and tag releases.
+2. Add packaging polish: an app icon, macOS codesign and notarization, a Windows installer, and builds uploaded as CI release artifacts.
+3. Add logging to a rotating file under the platform's app data folder, and a "Copy diagnostics" item under Help.
+4. Check for a new version on launch and offer the download page.
+5. Add a pre-commit hook for ruff, and consider `mypy` on `gitops/core` only.
+
+## v0.4: Always current
 
 1. **File watching:** a debounced `QFileSystemWatcher` on `.git/HEAD`, `index` and `refs`, plus the work tree, honouring ignore rules.
-2. **History paging:** continue from the last loaded commit instead of using `--skip`, and stream `git log` output instead of buffering it. Benchmark on a large repo such as linux or chromium.
-3. **Large repos:** handle huge numbers of untracked files and big diffs, and use `git status --porcelain=v2 -z` with `--untracked-files` tuned as needed.
-4. **Benchmarks:** a `tests/perf` suite gated behind a marker, with time budgets for status, log page, blame and search.
+2. **Auto-fetch** in the background for the open repo and the dashboard, with notifications when remote branches change.
+3. **History paging:** continue from the last loaded commit instead of using `--skip`, and stream `git log` output instead of buffering it.
+4. **Large repos:** handle huge numbers of untracked files and big diffs, and use `git status --porcelain=v2 -z` with `--untracked-files` tuned as needed.
+5. **Benchmarks:** a `tests/perf` suite gated behind a marker, with time budgets for status (200 ms), a log page (300 ms), blame and search on a large repo such as linux or chromium.
+6. **Settings page:** default branch, fetch interval, diff options (whitespace, tab width), fonts.
 
-## Phase 3: Refactor for maintainability (alongside Phase 2)
+## v0.5: Trust and identity
+
+1. **Commit signing:** GPG and SSH signing, with verified badges in History.
+2. **Credentials UX:** a sign-in flow (OAuth device flow or tokens in the OS keychain) instead of only showing clear errors.
+3. **Identity profiles:** a name, email and signing key per folder (for example work and personal), so commits never go out with the wrong email.
+
+## v0.6: Collaborate
+
+1. **Hosting integration:** GitHub and GitLab pull requests: list, check out, create from a branch.
+2. **CI status** on commits and branches in History and Branches.
+3. **Dashboard:** pull request and CI chips on each repo card.
+4. Review comments, after the above is stable.
+
+## v0.7: Better diffs and big repos
+
+1. **Diff upgrades:** syntax highlighting, image diffs, word-level highlighting within changed lines.
+2. **External tools:** configurable diff and merge tools in Settings.
+3. **Git LFS** awareness, partial and shallow clone options, and sparse checkout.
+
+## v1.0: Stable
+
+1. **Accessibility and i18n:** keyboard-only flows, screen-reader labels, and wrapping strings in `tr()`.
+2. A docs site with a page per feature.
+3. A stability bar: no known data-loss bugs and every perf budget met.
+
+## Refactor for maintainability (alongside v0.4 and v0.5)
+
+Finish this before v0.6, which adds a lot of new UI.
 
 1. Split `GitBackend` into focused modules (status/staging, refs/branches, history/log, remotes, rewrite, stash) behind the same `GitBackend` interface, so the UI code doesn't change.
 2. Move page wiring and actions out of `MainWindow` into small controllers. Split `conflict_editor.py` into the model, the three-pane view and the navigation.
 3. Make `gitops/core` free of any Qt import (checked in CI) so it can be reused, for example by a CLI or other front-ends.
 
-## Phase 4: Features (v0.4 to v1.0)
+## Candidate features
 
-Ordered by value to users:
+Not yet scheduled; each builds on what's already there. Pick them into a release once it has room.
 
-1. **Commit signing:** GPG and SSH signing, with verified badges in History.
-2. **Credentials UX:** a sign-in flow (OAuth device flow or tokens in the OS keychain) instead of only showing clear errors.
-3. **Hosting integration:** GitHub and GitLab pull requests (list, check out, create, CI status on commits), then review comments.
-4. **Settings page:** default branch, fetch interval, diff options (whitespace, word diff, tab width), external diff and merge tools, fonts.
-5. **Auto-fetch** in the background for the open repo and the dashboard, with notifications.
-6. **Git LFS** awareness, partial and shallow clone options, and sparse checkout.
-7. **Diff upgrades:** syntax highlighting, image diffs, word-level highlighting within changed lines.
-8. **Accessibility and i18n:** keyboard-only flows, screen-reader labels, and wrapping strings in `tr()`.
+1. **Safety net:** warn before a force push, before pushing to a protected branch, and before committing something that looks like a secret. Snapshot uncommitted work before a reset or discard, so Undo covers it too.
+2. **Bisect:** mark good and bad commits from History and step through visually.
+3. **Branch cleanup:** find branches that are merged or whose upstream is gone, and delete them in bulk.
+4. **Commit composer:** a co-author picker, Conventional Commit templates, issue-key linking, and readable output when a pre-commit hook fails.
+5. **Split and stack:** split a commit into several, and keep stacked branches in sync on rebase.
+6. **Dashboard bulk actions:** pull all, switch branch across repos, and saved repo groups.
+7. **AI help (opt-in, your own key):** draft a commit message from the staged diff, explain a commit, suggest a conflict resolution, write a PR description. Off by default, and clear about what leaves the machine.
+8. **`gitops` CLI** on top of the Qt-free core.
+
+## Open questions
+
+- Individual developers or teams first? Teams would move v0.6 ahead of v0.5.
+- Free and open source, or paid later? This sets how much signing, installer and auto-update work is worth it.
+- Telemetry and AI: ruled out, or allowed as opt-in?
 
 ## Ongoing
 
 - Every redesign commit comes with UI smoke tests; keep extending `tests/test_ui_smoke.py`.
 - Track crash and robustness reports in `tests/test_robustness.py`.
-- Every phase ends with a tagged release and a CHANGELOG entry.
+- Every release ends with a tag and a CHANGELOG entry.
