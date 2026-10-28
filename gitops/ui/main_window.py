@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gitops import __version__
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import Commit, Stash, Submodule, Tag, Worktree
 from gitops.core.rebase import has_merges, rebase_plan, run_interactive_rebase
@@ -228,11 +229,21 @@ class MainWindow(QMainWindow):
             group.addAction(act)
             theme_menu.addAction(act)
 
+        help_menu = self.menuBar().addMenu("&Help")
+        help_menu.addAction(self._action("About GitOps", self._about))
+
         # The top bar replaces the old toolbar; everything stays in the menus and the command palette.
         self.top_bar.sync_menu.addActions([self.fetch_act, self.pull_act, self.push_act])
         settings = self.top_bar.settings_menu
         settings.addMenu(theme_menu)
         settings.addActions([self.palette_act, self.console_act, self.gitignore_act])
+
+    def _about(self) -> None:
+        QMessageBox.about(
+            self,
+            "About GitOps",
+            f"<b>GitOps {__version__}</b><p>A desktop git repository manager built with Python and PySide6.</p>",
+        )
 
     def _set_repo_actions_enabled(self, enabled: bool) -> None:
         for action in self.repo_actions:

@@ -1,6 +1,6 @@
 [project]
 name = "gitops"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Desktop git repository manager built with PySide6"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,6 +16,10 @@ gitops = "gitops.app:main"
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.dynamic]
+# gitops/__init__.py holds the one copy of the version; the app and the build read it from there.
+version = { attr = "gitops.__version__" }
+
 [tool.setuptools.packages.find]
 include = ["gitops*"]
 
@@ -30,3 +34,7 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "UP", "B"]
 # The formatter owns line length; the long lines left are strings and comments.
 ignore = ["E501"]
+
+[tool.uv]
+# Reinstall when the version in gitops/__init__.py changes, so the installed metadata keeps up.
+cache-keys = [{ file = "pyproject.toml" }, { file = "gitops/__init__.py" }]

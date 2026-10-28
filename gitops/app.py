@@ -5,6 +5,7 @@ import sys
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from gitops import __version__
 from gitops.ui import theme
 from gitops.ui.main_window import MainWindow
 
@@ -14,6 +15,7 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(argv)
     app.setApplicationName("GitOps")
     app.setOrganizationName("gitops")
+    app.setApplicationVersion(__version__)
     theme.apply(str(QSettings().value("theme", "system")))
     theme.follow_system_changes()
     window = MainWindow()

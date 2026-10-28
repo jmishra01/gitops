@@ -17,6 +17,14 @@ uv run pytest
 
 Tests run offscreen (`QT_QPA_PLATFORM=offscreen`) against throwaway repos and ignore your `~/.gitconfig`.
 
+## Release
+
+1. Bump `__version__` in `gitops/__init__.py`, the only place the version is kept.
+2. Add a section for it to `CHANGELOG.md`.
+3. Commit, then tag it: `git tag -a v0.3.0 -m "GitOps 0.3.0"`.
+
+Install the pre-commit hook once with `uvx pre-commit install` to run ruff before each commit, as CI does.
+
 ## Build a standalone app
 
 ```bash
