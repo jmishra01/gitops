@@ -3,11 +3,12 @@
 ## Where the project stands
 
 - **What's built:** a staging workbench, history with a lane graph, branches, stashes, a file inspector, blame, search across history, a conflict resolver, interactive rebase, undo from the reflog, and a dashboard for many repos.
-- **Done since the last roadmap:** GitHub Actions run ruff and pytest on macOS, Windows and Linux, and `pyproject.toml` has a `[tool.ruff]` config.
+- **Versions:** 0.3.0 to 0.3.5, with a `CHANGELOG.md` entry for each. Pushing a `v*` tag builds macOS, Windows and Linux and publishes a GitHub release; 0.3.4 is the only one published so far.
+- **Quality checks:** CI runs ruff, pytest on macOS, Windows and Linux, and mypy on `gitops/core` (type-checked as each platform).
 - **Gaps in the basics:**
-  - `pyproject.toml` still says `0.1.0`, although commit messages call this work v0.3. There's no `CHANGELOG.md` and no tagged release.
-  - The build has no app icon (`icon=None`), no signing and no installer, and the app has no logging.
-- **Hotspots:** `gitops/core/git_backend.py` (~1,090 lines), `gitops/ui/main_window.py` (~1,030) and `gitops/ui/dialogs/conflict_editor.py` (~960) are the files that will slow down future changes.
+  - The builds are unsigned, so macOS and Windows warn before opening them. Windows gets a zip, not an installer, and macOS builds are Apple silicon only.
+  - The repository has no license file.
+- **Hotspots:** `gitops/core/git_backend.py` (~1,100 lines), `gitops/ui/main_window.py` (~1,100) and `gitops/ui/dialogs/conflict_editor.py` (~960) are the files that will slow down future changes.
 - **Scaling risks:**
   - History loads pages with `--skip`, so each later page costs more on large repos.
   - The app only refreshes when the window is re-activated, so changes made in a terminal or editor don't show up until then.
@@ -18,11 +19,21 @@ GitOps is the git client that makes history and risky operations safe and easy t
 
 ## v0.3: Ship it
 
-1. Set up versioning: bump to `0.3.0`, keep a single source for the version, add `CHANGELOG.md` and tag releases.
-2. Add packaging polish: an app icon, macOS codesign and notarization, a Windows installer, and builds uploaded as CI release artifacts.
-3. Add logging to a rotating file under the platform's app data folder, and a "Copy diagnostics" item under Help.
-4. Check for a new version on launch and offer the download page.
-5. Add a pre-commit hook for ruff, and consider `mypy` on `gitops/core` only.
+Done:
+
+1. **Versioning:** a single source for the version in `gitops/__init__.py`, `CHANGELOG.md`, and tagged releases (0.3.0).
+2. **Logging** to a rotating file in the platform's app data folder, with Help › Copy diagnostics (0.3.1).
+3. **Update check** on launch, at most once a day, linking to the download page (0.3.2).
+4. **App icon** for the window, the macOS bundle, the Windows executable and a Linux desktop file (0.3.3).
+5. **Release builds** for macOS, Windows and Linux from `v*` tags, attached to a GitHub release (0.3.4).
+6. **Checks:** a pre-commit hook for ruff (0.3.0), mypy on `gitops/core` in CI, and the macOS bundle version that Finder shows (0.3.5).
+
+Still to do:
+
+1. **Choose a license.** It also decides whether a paid edition stays possible later.
+2. **Code signing:** macOS codesign and notarization, and Windows signing. These need an Apple Developer account and a code-signing certificate, stored as CI secrets.
+3. **Windows installer** (Inno Setup or MSIX) with a Start menu entry and an uninstaller.
+4. **Intel Mac build**, if there's demand: a second macOS runner in the Release workflow.
 
 ## v0.4: Always current
 

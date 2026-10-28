@@ -2,6 +2,16 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.5 - 2026-10-28
+
+### Added
+- The macOS app's Finder info shows the GitOps version instead of 0.0.0. The release workflow checks the version and the bundle's signature.
+- CI type-checks `gitops/core` with mypy, as Linux, macOS and Windows.
+
+### Changed
+- Stopping a git process on Windows no longer relies on `os.killpg` failing there; the platform is checked first. Behaviour is unchanged.
+- ROADMAP.md marks the finished v0.3 items and lists what's left: a license, code signing, a Windows installer and an Intel Mac build.
+
 ## 0.3.4 - 2026-10-28
 
 ### Added

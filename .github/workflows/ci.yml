@@ -17,6 +17,11 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uvx ruff@0.14.0 check .
       - run: uvx ruff@0.14.0 format --check .
+      # gitops/core only (see [tool.mypy]); checked as each platform, since it branches on sys.platform.
+      - run: |
+          for platform in linux darwin win32; do
+            uvx mypy@1.18.2 --platform "$platform"
+          done
 
   test:
     strategy:

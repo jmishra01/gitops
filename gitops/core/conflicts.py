@@ -175,7 +175,7 @@ def render_resolution(segments: list[Segment], decisions: dict[int, Decision], e
     out: list[str] = []
     n = 0
     for seg in segments:
-        if not seg.is_conflict:
+        if seg.block is None:  # shared text
             out.extend(seg.lines)
             continue
         decision = decisions.get(n)

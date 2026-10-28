@@ -62,7 +62,10 @@ jobs:
 
       # Smoke test: the frozen app imports everything and reports the tagged version.
       - if: runner.os == 'macOS'
-        run: test "$(dist/GitOps.app/Contents/MacOS/GitOps --version)" = "GitOps ${{ needs.check.outputs.version }}"
+        run: |
+          test "$(dist/GitOps.app/Contents/MacOS/GitOps --version)" = "GitOps ${{ needs.check.outputs.version }}"
+          test "$(plutil -extract CFBundleShortVersionString raw dist/GitOps.app/Contents/Info.plist)" = "${{ needs.check.outputs.version }}"
+          codesign --verify --deep --strict dist/GitOps.app
       - if: runner.os == 'Linux'
         run: test "$(dist/GitOps/GitOps --version)" = "GitOps ${{ needs.check.outputs.version }}"
       # A windowed .exe has no console to print to, so only its exit code is checked.

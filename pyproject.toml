@@ -41,3 +41,10 @@ ignore = ["E501"]
 [tool.uv]
 # Reinstall when the version in gitops/__init__.py changes, so the installed metadata keeps up.
 cache-keys = [{ file = "pyproject.toml" }, { file = "gitops/__init__.py" }]
+
+[tool.mypy]
+# The UI-free core is type-checked in CI, as each platform (see .github/workflows/ci.yml).
+files = ["gitops/core"]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true

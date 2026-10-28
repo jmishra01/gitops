@@ -8,13 +8,16 @@ same methods without touching callers.
 
 from __future__ import annotations
 
+import io
 import os
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
+from typing import Any, cast
 
 from gitops.core.encoding import decode_lossless, encode_lossless
 from gitops.core.models import (
@@ -89,16 +92,22 @@ def _git_env(extra: dict[str, str] | None = None) -> dict[str, str] | None:
 # On Windows a console program started from a GUI app gets a console window of
 # its own, so every git call would flash one; CREATE_NO_WINDOW keeps it hidden
 # (and git's own children, such as ssh, inherit that hidden console).
-_DETACHED: dict[str, object] = (
-    {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
-)
+# (sys.platform rather than os.name, so type checkers know which branch applies.)
+_DETACHED: dict[str, Any]
+if sys.platform == "win32":
+    _DETACHED = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    _DETACHED = {"start_new_session": True}
 
 
 def _kill(proc: subprocess.Popen[bytes]) -> None:
     """Stop git and everything it started (ssh, remote helpers) in its session."""
+    if sys.platform == "win32":  # no process groups to signal; stop git itself
+        proc.kill()
+        return
     try:
         os.killpg(proc.pid, signal.SIGKILL)
-    except (AttributeError, ProcessLookupError, PermissionError, OSError):  # Windows, or already gone
+    except OSError:  # already gone (ProcessLookupError) or not ours (PermissionError)
         proc.kill()
 
 
@@ -133,11 +142,12 @@ def parse_commit_header(line: str) -> Commit:
 def _progress_lines(proc: subprocess.Popen[bytes], args: Sequence[str]) -> Iterator[str]:
     """Yield git's progress output (which redraws lines with \\r) one update at a time."""
     assert proc.stdout is not None
+    stdout = cast(io.BufferedReader, proc.stdout)  # typed IO[bytes], which lacks read1
     tail: list[str] = []
     buf = b""
     finished = False
     try:
-        while chunk := proc.stdout.read1(4096):
+        while chunk := stdout.read1(4096):
             buf += chunk
             *complete, buf = _PROGRESS_SPLIT.split(buf)
             for raw in complete:

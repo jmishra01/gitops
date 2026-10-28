@@ -33,6 +33,16 @@ uv run --with "pyinstaller>=6.10" pyinstaller \
   "${args[@]}" \
   scripts/launch.py
 
+if [[ "$(uname -s)" == Darwin ]]; then
+  # PyInstaller leaves the bundle version at 0.0.0; set it so Finder and About show the real one.
+  # The ad-hoc signature covers Info.plist, so sign again afterwards.
+  version=$(uv run python -c "import gitops; print(gitops.__version__)")
+  plist=dist/GitOps.app/Contents/Info.plist
+  plutil -replace CFBundleShortVersionString -string "$version" "$plist"
+  plutil -replace CFBundleVersion -string "$version" "$plist"
+  codesign --force --deep --sign - dist/GitOps.app
+fi
+
 if [[ "$(uname -s)" == Linux ]]; then
   cp packaging/linux/gitops.desktop dist/GitOps/
   cp gitops/resources/gitops.png dist/GitOps/gitops.png
