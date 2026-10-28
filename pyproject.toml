@@ -28,6 +28,8 @@ gitops = ["resources/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Print every thread's stack when one test runs this long, so a hang in CI shows where it is.
+faulthandler_timeout = 120
 
 [tool.ruff]
 line-length = 120

@@ -47,8 +47,30 @@ def isolated_git_config(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    # CI runners have no git identity, and git can't always guess one (it can on macOS, which is
+    # why this only failed on Linux and Windows). Commits the app makes, and rebases, need one.
+    for i, (key, value) in enumerate([("user.name", "GitOps Tests"), ("user.email", "tests@example.com")]):
+        monkeypatch.setenv(f"GIT_CONFIG_KEY_{i}", key)
+        monkeypatch.setenv(f"GIT_CONFIG_VALUE_{i}", value)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
 
 
 @pytest.fixture
 def repo(tmp_path) -> RepoBuilder:
     return RepoBuilder(tmp_path / "repo")
+
+
+@pytest.fixture(autouse=True)
+def no_unexpected_dialogs(monkeypatch):
+    """Fail on a message box a test didn't plan for, instead of blocking: offscreen, nobody can
+    close it, so the test run would hang. Tests that expect one patch it themselves."""
+    from PySide6.QtWidgets import QMessageBox
+
+    def fail(kind):
+        def show(_parent, title, text, *args, **kwargs):
+            raise AssertionError(f"Unexpected {kind} dialog: {title}: {text}")
+
+        return staticmethod(show)
+
+    for kind in ("warning", "critical", "information", "question", "about"):
+        monkeypatch.setattr(QMessageBox, kind, fail(kind))

@@ -2,6 +2,15 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.6 - 2026-10-28
+
+### Fixed
+- CI tests on Linux and Windows hung until GitHub's six-hour limit, from the day CI was added. The runners have no git identity, so a test's commit failed, and the app's error dialog waited for a click nobody could make. Tests now set a git identity, and any dialog a test didn't plan for fails that test straight away with its message.
+- A dashboard layout test assumed the window could get narrow enough for one column, which Linux fonts don't allow.
+
+### Changed
+- CI test jobs stop after 20 minutes, and pytest prints every thread's stack when a test runs longer than two minutes.
+
 ## 0.3.5 - 2026-10-28
 
 ### Added
