@@ -85,6 +85,7 @@ The window has a **top bar** (repository and branch switchers, command search, o
 - **Git console** (Ctrl+\`): the git commands the app runs, so you can learn or reproduce them.
 - **.gitignore editor** that tests a path against your *unsaved* rules.
 - **Diagnostics**: errors and crashes go to a rotating log file. Help › Copy diagnostics puts versions and the end of the log on the clipboard for a bug report.
+- **Updates**: once a day GitOps checks GitHub for a newer release and says so in the status bar. Turn it off under Help.
 - **Themes**: System, Light or Dark (View › Theme). Every page, diff, blame and dialog follows it.
 - Repositories open, clone (with live progress) and init from the repo menu. The last repo reopens on launch; window and pane sizes are remembered.
 - Files that aren't UTF-8 keep their exact bytes when you stage lines or resolve conflicts.

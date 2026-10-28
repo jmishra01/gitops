@@ -2,6 +2,12 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.2 - 2026-10-28
+
+### Added
+- **Update check:** on launch, at most once a day, GitOps asks GitHub for the latest release and shows "GitOps X is available" in the status bar, linking to the download page. Only the release metadata is requested; nothing about you or your repositories is sent.
+- **Help › Check for updates…** checks right away, and **Help › Check for updates automatically** turns the launch check off.
+
 ## 0.3.1 - 2026-10-28
 
 ### Added

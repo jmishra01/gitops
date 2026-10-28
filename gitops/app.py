@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     if len(argv) > 1:
         window.open_repo(argv[1])
     window.show()
+    window.check_for_updates()
     return app.exec()
 
 

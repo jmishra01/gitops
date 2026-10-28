@@ -503,3 +503,26 @@ def test_help_menu_copies_diagnostics(window, qapp):
     assert {"Copy diagnostics", "Open log folder", "About GitOps"} <= set(actions)
     actions["Copy diagnostics"].trigger()
     assert qapp.clipboard().text().startswith("GitOps ")
+
+
+def test_update_check_shows_a_button_and_respects_settings(window, qtbot, monkeypatch):
+    from gitops.services import updates
+
+    calls = []
+
+    def fake_newer_release():
+        calls.append(1)
+        return updates.Release("9.9.9", "https://example.test/releases/9.9.9")
+
+    monkeypatch.setattr(updates, "newer_release", fake_newer_release)
+    window.auto_update_act.setChecked(False)
+    window.check_for_updates()
+    assert not calls  # automatic checks are off
+
+    window.auto_update_act.setChecked(True)
+    window.check_for_updates()
+    qtbot.waitUntil(lambda: window.update_btn.isVisibleTo(window), timeout=5000)
+    assert window.update_btn.text() == "GitOps 9.9.9 is available"
+
+    window.check_for_updates()
+    assert len(calls) == 1  # at most once a day

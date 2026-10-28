@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSettings, Qt, QUrl
@@ -25,7 +26,7 @@ from gitops import __version__
 from gitops.core.git_backend import GitBackend, GitError
 from gitops.core.models import Commit, Stash, Submodule, Tag, Worktree
 from gitops.core.rebase import has_merges, rebase_plan, run_interactive_rebase
-from gitops.services import diagnostics
+from gitops.services import diagnostics, updates
 from gitops.services.task_runner import Task, TaskRunner
 from gitops.ui import theme
 from gitops.ui.dashboard import DashboardWindow
@@ -138,6 +139,12 @@ class MainWindow(QMainWindow):
         self.cancel_network_btn.clicked.connect(self._cancel_network)
         self.statusBar().addWidget(self.progress_label, 1)
         self.statusBar().addWidget(self.cancel_network_btn)
+        self.update_btn = QPushButton()
+        self.update_btn.setFlat(True)
+        self.update_btn.hide()
+        # The tooltip holds the release page's URL.
+        self.update_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.update_btn.toolTip())))
+        self.statusBar().addPermanentWidget(self.update_btn)
         self.show_page(self.changes)
 
         self.dashboard: DashboardWindow | None = None
@@ -234,6 +241,12 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self._action("Copy diagnostics", self._copy_diagnostics))
         help_menu.addAction(self._action("Open log folder", self._open_log_folder))
         help_menu.addSeparator()
+        help_menu.addAction(self._action("Check for updates…", lambda: self.check_for_updates(manual=True)))
+        self.auto_update_act = QAction("Check for updates automatically", self, checkable=True)
+        self.auto_update_act.setChecked(self.settings.value("updates/auto", True, type=bool))
+        self.auto_update_act.toggled.connect(lambda on: self.settings.setValue("updates/auto", on))
+        help_menu.addAction(self.auto_update_act)
+        help_menu.addSeparator()
         help_menu.addAction(self._action("About GitOps", self._about))
 
         # The top bar replaces the old toolbar; everything stays in the menus and the command palette.
@@ -258,6 +271,40 @@ class MainWindow(QMainWindow):
         folder = path.parent if path else diagnostics.log_dir()
         folder.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def check_for_updates(self, manual: bool = False) -> None:
+        """Ask GitHub for a newer release: on request, or at most once a day when automatic."""
+        if not manual:
+            last = self.settings.value("updates/last_check", 0.0, type=float)
+            if not self.auto_update_act.isChecked() or time.time() - last < updates.CHECK_INTERVAL:
+                return
+        self.settings.setValue("updates/last_check", time.time())
+        task = Task(updates.newer_release)
+        task.signals.result.connect(lambda release: self._update_checked(release, manual))
+        if manual:
+            task.signals.error.connect(
+                lambda msg: QMessageBox.warning(self, "Couldn't check for updates", f"GitHub didn't answer: {msg}")
+            )
+        self.runner.submit(task)
+
+    def _update_checked(self, release: updates.Release | None, manual: bool) -> None:
+        if release is None:
+            if manual:
+                QMessageBox.information(self, "No updates", f"GitOps {__version__} is the latest version.")
+            return
+        self.update_btn.setText(f"GitOps {release.version} is available")
+        self.update_btn.setToolTip(release.url)
+        self.update_btn.show()
+        if (
+            manual
+            and QMessageBox.question(
+                self,
+                "Update available",
+                f"GitOps {release.version} is available (you have {__version__}). Open the download page?",
+            )
+            == QMessageBox.StandardButton.Yes
+        ):
+            QDesktopServices.openUrl(QUrl(release.url))
 
     def _set_repo_actions_enabled(self, enabled: bool) -> None:
         for action in self.repo_actions:
