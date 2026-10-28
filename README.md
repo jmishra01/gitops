@@ -33,6 +33,8 @@ scripts/build_app.sh
 
 This produces `dist/GitOps.app` on macOS (a folder on Linux and Windows) using PyInstaller. Qt modules the app doesn't use are left out.
 
+The app icon is `gitops/resources/gitops.svg`. After editing it, run `uv run python scripts/make_icons.py` to rebuild the PNG (window and Linux), `.ico` (Windows) and `.icns` (macOS) next to it. On Linux the build folder also gets `gitops.desktop` and `gitops.png` for your app menu.
+
 ## Features
 
 The window has a **top bar** (repository and branch switchers, command search, one Sync button that knows whether to push, pull or publish, Undo, the git console and theme) and a **navigation rail** with one page per job.

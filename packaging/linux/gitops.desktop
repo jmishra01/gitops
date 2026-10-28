@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GitOps
+GenericName=Git client
+Comment=Desktop git repository manager
+Exec=GitOps %F
+Icon=gitops
+Terminal=false
+Categories=Development;RevisionControl;
+StartupWMClass=GitOps

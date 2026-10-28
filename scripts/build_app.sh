@@ -14,6 +14,15 @@ EXCLUDES=(
 args=()
 for module in "${EXCLUDES[@]}"; do args+=(--exclude-module "$module"); done
 
+# Icons come from gitops/resources (regenerate them with scripts/make_icons.py).
+# macOS reads .icns and Windows .ico; Linux has no executable icon, so the desktop file below supplies it.
+case "$(uname -s)" in
+  Darwin) args+=(--icon gitops/resources/gitops.icns) ;;
+  MINGW* | MSYS* | CYGWIN*) args+=(--icon gitops/resources/gitops.ico) ;;
+esac
+# The app loads its window icon from gitops/resources at runtime.
+args+=(--add-data "gitops/resources:gitops/resources")
+
 # --paths . : the package is installed editable (an import hook PyInstaller can't follow),
 # so point it at the source tree directly.
 uv run --with "pyinstaller>=6.10" pyinstaller \
@@ -24,4 +33,11 @@ uv run --with "pyinstaller>=6.10" pyinstaller \
   "${args[@]}" \
   scripts/launch.py
 
-echo "Built: $(ls -d dist/GitOps* | head -1)"
+if [[ "$(uname -s)" == Linux ]]; then
+  cp packaging/linux/gitops.desktop dist/GitOps/
+  cp gitops/resources/gitops.png dist/GitOps/gitops.png
+  echo "To add GitOps to your app menu, copy dist/GitOps/gitops.desktop to ~/.local/share/applications"
+  echo "and dist/GitOps/gitops.png to ~/.local/share/icons/hicolor/512x512/apps/, and put dist/GitOps on PATH."
+fi
+
+echo "Built: $(ls -d dist/GitOps.app dist/GitOps 2>/dev/null | head -1)"

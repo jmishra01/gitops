@@ -2,6 +2,13 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.3 - 2026-10-28
+
+### Added
+- **App icon:** a commit graph with a branch running beside main, on GitOps blue. It shows in the window, the Dock and taskbar, the macOS app bundle and the Windows executable.
+- A Linux desktop file (`packaging/linux/gitops.desktop`), copied into Linux builds with the icon.
+- `scripts/make_icons.py` rebuilds the PNG, `.ico` and `.icns` from `gitops/resources/gitops.svg` on any platform.
+
 ## 0.3.2 - 2026-10-28
 
 ### Added

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- GitOps app icon. Edit this file, then run scripts/make_icons.py to rebuild the PNG, .ico and .icns. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4C76F6"/>
+      <stop offset="1" stop-color="#1F3FB8"/>
+    </linearGradient>
+  </defs>
+  <!-- The macOS icon grid: an 824px tile centred on the 1024px canvas. -->
+  <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#bg)"/>
+  <!-- A branch leaving main on its own lane and merging back: the History lane graph. -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="56" stroke-linecap="round">
+    <line x1="352" y1="196" x2="352" y2="828"/>
+    <path d="M352,272 C352,372 672,300 672,400 L672,624 C672,724 352,652 352,752"/>
+  </g>
+  <circle cx="352" cy="272" r="64" fill="#FFFFFF"/>
+  <circle cx="352" cy="512" r="64" fill="#FFFFFF"/>
+  <circle cx="352" cy="752" r="64" fill="#FFFFFF"/>
+  <circle cx="672" cy="512" r="64" fill="#FFB547" stroke="#FFFFFF" stroke-width="26"/>
+</svg>
