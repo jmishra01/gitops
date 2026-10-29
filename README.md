@@ -4,6 +4,8 @@ A desktop git repository manager built with Python and PySide6 (Qt 6).
 
 ## Run
 
+Needs Python 3.12 or newer and git.
+
 ```bash
 uv sync
 uv run gitops /path/to/repo

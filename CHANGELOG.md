@@ -2,6 +2,12 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.7 - 2026-10-29
+
+### Changed
+- **GitOps now needs Python 3.12 or newer** to run from source. With PySide6 6.12 on Python 3.11, every Qt signal emitted from Python drops one reference to `True`, and once enough have been emitted Python aborts with "deallocating True or False". Python 3.12 made `True` immortal, so the same bug is harmless there. The downloadable builds already used 3.12.
+- CI tests on Python 3.12 and 3.13, and publishes the end of pytest's output as a public annotation when a test job fails, since job logs need a GitHub sign-in.
+
 ## 0.3.6 - 2026-10-28
 
 ### Fixed
