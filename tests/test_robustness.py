@@ -66,6 +66,7 @@ def test_hooks_cannot_reach_a_terminal(repo, backend):
     assert report.read_text().strip() == "no-tty"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX; on Windows Cancel stops git itself")
 def test_cancel_kills_the_whole_process_group(tmp_path, backend, monkeypatch):
     # A custom git "command" that spawns a long-lived child, like git does with ssh.
     marker = tmp_path / "child.pid"

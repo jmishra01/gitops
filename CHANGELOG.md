@@ -2,6 +2,11 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.9 - 2026-10-29
+
+### Fixed
+- The test that Cancel kills git's whole process group is skipped on Windows, which has no process groups; there Cancel stops git itself. With this, CI passes on macOS, Linux and Windows.
+
 ## 0.3.8 - 2026-10-29
 
 ### Fixed
