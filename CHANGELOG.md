@@ -2,6 +2,13 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.8 - 2026-10-29
+
+### Fixed
+- **Files with Windows line endings (CRLF)** no longer show a stray carriage return at the end of each line in diffs, hunks, blame and history search results. The bytes git stores are unchanged, so staging lines still keeps every CRLF exactly.
+- Rebase commit messages, the rebase plan, `MERGE_MSG` and the .gitignore tester now read and write UTF-8 with LF line endings on every OS. On Windows they used cp1252, so a message with "é" reached git garbled.
+- Tests write files byte for byte, so they pass on Windows, where text mode wrote CRLF and cp1252. New tests cover CRLF files on every OS.
+
 ## 0.3.7 - 2026-10-29
 
 ### Changed

@@ -192,7 +192,7 @@ def _parse_patch_stream(lines: Iterator[str], pattern: re.Pattern[str]) -> Itera
             continue
 
         if line[:1] in ("+", "-"):
-            content = line[1:]
+            content = line[1:].removesuffix("\r")  # CRLF files: match and show the text, not the CR
             if pattern.search(content):
                 (added if line[0] == "+" else removed).append(content)
 

@@ -526,3 +526,15 @@ def test_update_check_shows_a_button_and_respects_settings(window, qtbot, monkey
 
     window.check_for_updates()
     assert len(calls) == 1  # at most once a day
+
+
+def test_crlf_file_shows_lines_without_cr_and_stages_exact_bytes(window, repo):
+    (repo.path / "auth.py").write_bytes(b"def oauth(user):\r\n    pass\r\n")
+    repo.commit("use CRLF")
+    (repo.path / "auth.py").write_bytes(b"def oauth(user):\r\n    return token\r\nEXTRA = 1\r\n")
+    window._refresh_status()
+    changes = window.changes
+    assert changes.select_file("auth.py", staged=False)
+    tick_line(changes, "+EXTRA = 1")  # shown without the CR
+    changes.apply_selected_lines()
+    assert window.backend.run_bytes("show", ":auth.py") == b"def oauth(user):\r\n    pass\r\nEXTRA = 1\r\n"

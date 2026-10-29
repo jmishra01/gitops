@@ -31,12 +31,13 @@ def display_text(text: str) -> str:
     """Make losslessly-decoded text safe for Qt, keeping line breaks where they are.
 
     Lines that aren't valid UTF-8 are shown as Latin-1, so a legacy "café"
-    reads as café rather than as a replacement character.
+    reads as café rather than as a replacement character. A CRLF line loses
+    its "\r", which Qt would otherwise show; the bytes in git are untouched.
     """
     lines = text.split("\n")
     out = []
     for line in lines:
-        raw = line.encode("utf-8", LOSSLESS)
+        raw = line.removesuffix("\r").encode("utf-8", LOSSLESS)
         try:
             out.append(raw.decode("utf-8"))
         except UnicodeDecodeError:

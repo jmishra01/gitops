@@ -65,7 +65,7 @@ def build_todo(backend: GitBackend, steps: list[RebaseStep], message_dir) -> str
                 message += "\n\n" + full_message(step.commit)
             message_count += 1
             path = message_dir / f"message-{message_count}.txt"
-            path.write_text(message.strip() + "\n")
+            path.write_text(message.strip() + "\n", encoding="utf-8", newline="\n")  # git reads UTF-8
             lines.append(f"exec git commit --amend -q --allow-empty -F {shlex.quote(str(path))}")
         group.clear()
 
@@ -89,7 +89,7 @@ def run_interactive_rebase(backend: GitBackend, base: str | None, steps: list[Re
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
     todo = work / "todo"
-    todo.write_text(build_todo(backend, steps, work))
+    todo.write_text(build_todo(backend, steps, work), encoding="utf-8", newline="\n")
     env = {"GIT_SEQUENCE_EDITOR": f"cp {shlex.quote(str(todo))}"}
     args = ["rebase", "-i", "--empty=drop"]
     args += [base] if base else ["--root"]

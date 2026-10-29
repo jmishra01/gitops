@@ -22,7 +22,8 @@ class RepoBuilder:
     def write(self, rel: str, content: str) -> None:
         target = self.path / rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        # Exact bytes on every OS: text mode would write CRLF and cp1252 on Windows.
+        target.write_bytes(content.encode("utf-8"))
 
     def commit(self, message: str, author: str = "Alice") -> str:
         self._tick += 3600

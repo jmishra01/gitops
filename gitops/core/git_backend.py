@@ -647,7 +647,7 @@ class GitBackend:
         path = self.git_path("MERGE_MSG")
         if not path.exists():
             return ""
-        lines = path.read_text(errors="replace").splitlines()
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         return "\n".join(line for line in lines if not line.startswith("#")).strip()
 
     def tags(self) -> list[Tag]:
@@ -867,7 +867,7 @@ class GitBackend:
                         timestamp=int(info.get("author-time", "0")),
                         summary=info.get("summary", ""),
                         orig_path=info.get("filename", path),
-                        text=raw[1:],
+                        text=raw[1:].removesuffix("\r"),  # a CRLF file's line, without the CR
                     )
                 )
                 continue
@@ -1042,7 +1042,7 @@ class GitBackend:
                 env=_git_env(),
                 **_DETACHED,
             )
-            Path(tmp, ".gitignore").write_text(rules, errors="surrogateescape")
+            Path(tmp, ".gitignore").write_text(rules, encoding="utf-8", errors="surrogateescape", newline="\n")
             proc = subprocess.run(
                 ["git", "-C", tmp, "check-ignore", "-v", "--no-index", "--", path],
                 capture_output=True,
