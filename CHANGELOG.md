@@ -2,6 +2,11 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.11 - 2026-10-30
+
+### Fixed
+- Tests turn off git's automatic background maintenance. After a commit, git can start a detached maintenance process that may still be touching `.git` while a test checks it; the likely cause of an intermittent index check failure on Windows.
+
 ## 0.3.10 - 2026-10-30
 
 ### Changed

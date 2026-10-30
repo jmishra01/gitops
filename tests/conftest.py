@@ -48,12 +48,20 @@ def isolated_git_config(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    # CI runners have no git identity, and git can't always guess one (it can on macOS, which is
-    # why this only failed on Linux and Windows). Commits the app makes, and rebases, need one.
-    for i, (key, value) in enumerate([("user.name", "GitOps Tests"), ("user.email", "tests@example.com")]):
+    config = [
+        # CI runners have no git identity, and git can't always guess one (it can on macOS, which is
+        # why this only failed on Linux and Windows). Commits the app makes, and rebases, need one.
+        ("user.name", "GitOps Tests"),
+        ("user.email", "tests@example.com"),
+        # No background maintenance after commits: a detached `git maintenance` can still be
+        # touching .git while the next test step runs (seen as a flaky index check on Windows).
+        ("maintenance.auto", "false"),
+        ("gc.auto", "0"),
+    ]
+    for i, (key, value) in enumerate(config):
         monkeypatch.setenv(f"GIT_CONFIG_KEY_{i}", key)
         monkeypatch.setenv(f"GIT_CONFIG_VALUE_{i}", value)
-    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    monkeypatch.setenv("GIT_CONFIG_COUNT", str(len(config)))
 
 
 @pytest.fixture
