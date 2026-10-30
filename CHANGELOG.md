@@ -2,6 +2,11 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.12 - 2026-10-30
+
+### Changed
+- The test that background refreshes never rewrite git's index is marked as an expected failure on Windows. Git for Windows intermittently rewrites the index during `git status` and `git diff` there, even with `--no-optional-locks`; the background-maintenance change in 0.3.11 turned out not to be the cause. The test still runs, and must pass, on macOS and Linux.
+
 ## 0.3.11 - 2026-10-30
 
 ### Fixed
