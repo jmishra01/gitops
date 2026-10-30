@@ -22,7 +22,7 @@ Tests run offscreen (`QT_QPA_PLATFORM=offscreen`) against throwaway repos and ig
 ## Release
 
 1. Bump `__version__` in `gitops/__init__.py`, the only place the version is kept.
-2. Add a section for it to `CHANGELOG.md`. It becomes the release notes.
+2. Add a section for it to `CHANGELOG.md`. The release notes are every section since the previous release (the highest earlier `v*` tag), so versions you never tagged are included too.
 3. Commit, tag and push: `git tag -a v0.3.4 -m "GitOps 0.3.4"`, then `git push origin main v0.3.4`.
 
 The **Release** workflow then builds GitOps on macOS (Apple silicon), Windows and Linux, checks each build starts, and publishes a GitHub release with the builds attached. It stops first if the tag doesn't match the version or the CHANGELOG has no entry for it; `python scripts/release_info.py v0.3.4` runs the same check locally. The builds aren't signed yet, so the release notes explain how to open them.

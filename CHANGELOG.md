@@ -2,6 +2,11 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.10 - 2026-10-30
+
+### Changed
+- **Release notes cover everything since the previous release.** They list every CHANGELOG section after the highest earlier `v*` tag, newest first, so versions that were never tagged (like 0.3.6 to 0.3.8 before 0.3.9) are included. `scripts/release_info.py --since <tag>` picks the starting point by hand.
+
 ## 0.3.9 - 2026-10-29
 
 ### Fixed
