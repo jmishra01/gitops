@@ -2,6 +2,7 @@ import os
 import stat
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -138,6 +139,28 @@ def test_stash_before_first_commit_explains_why(tmp_path):
     empty.stage("f")
     with pytest.raises(GitError, match="before the first commit"):
         empty.stash_save("x")
+
+
+# ---------------------------------------------------------------- streaming
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="uses a shell script as the git executable")
+def test_stream_survives_a_full_stderr_pipe(backend, tmp_path):
+    """Lots of stderr while stdout streams used to deadlock: git blocked on stderr, we on stdout."""
+    fake = tmp_path / "noisy-git"
+    fake.write_text(
+        "#!/bin/sh\n"
+        "head -c 300000 /dev/zero | tr '\\0' w >&2\n"  # well past the 64 KB pipe buffer
+        "echo one\necho two\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    backend.git_executable = str(fake)
+    lines: list[str] = []
+    worker = threading.Thread(target=lambda: lines.extend(backend.stream("log")), daemon=True)
+    worker.start()
+    worker.join(timeout=20)
+    assert not worker.is_alive(), "stream() hung on a full stderr pipe"
+    assert lines == ["one", "two"]
 
 
 # ---------------------------------------------------------------- .gitignore bytes

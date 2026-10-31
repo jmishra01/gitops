@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import PurePosixPath
 
 from PySide6.QtCore import QEvent, Qt, Signal
@@ -31,10 +31,8 @@ from gitops.ui.dialogs.conflict_editor import ConflictResolver
 from gitops.ui.theme import colors
 from gitops.ui.widgets.commit_composer import CommitComposer
 from gitops.ui.widgets.diff_view import DiffView
-from gitops.ui.widgets.file_list import ChangeFileList, FileRow
+from gitops.ui.widgets.file_list import ChangeFileList, Counts, FileRow
 from gitops.ui.widgets.hunk_view import HunkDiffView
-
-Counts = dict[str, tuple[int | None, int | None]]
 
 
 @dataclass(frozen=True)
@@ -47,10 +45,14 @@ class WorkingState:
     staged_counts: Counts = field(default_factory=dict)
 
 
-def load_state(backend: GitBackend) -> WorkingState:
-    """Everything the Changes view shows, gathered in one go (safe to run on a worker thread)."""
+def load_state(backend: GitBackend, counts: bool = True) -> WorkingState:
+    """Everything the Changes view shows, gathered in one go (safe to run on a worker thread).
+
+    Line counts are most of the cost (`git diff --numstat` reads every changed file:
+    ~0.75 s for 5,000 of them), so `counts=False` leaves them out.
+    """
     operation = backend.operation_in_progress()
-    unstaged_counts, staged_counts = backend.change_counts()
+    unstaged_counts, staged_counts = backend.change_counts() if counts else ({}, {})
     return WorkingState(
         backend.status(),
         operation,
@@ -91,9 +93,10 @@ class ChangesView(QWidget):
     open_blame = Signal(str, object)
     count_changed = Signal(int)
 
-    def __init__(self, parent=None):
+    def __init__(self, runner: TaskRunner | None = None, parent=None):
         super().__init__(parent, objectName="ChangesPage")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.runner = runner  # with one, line counts load in the background after the user's actions
         self.backend: GitBackend | None = None
         self.patch: FilePatch | None = None
         self.current: FileRow | None = None
@@ -102,6 +105,7 @@ class ChangesView(QWidget):
         self.merge_message = ""
         self.branch: str | None = None
         self._generation = 0  # bumped by every refresh; stale background results are dropped
+        self._counts: tuple[Counts, Counts] = ({}, {})  # (unstaged, staged) line counts last shown
 
         # ---- banner for merges/rebases/cherry-picks that stopped on conflicts
         self.banner = QFrame(objectName="Banner")
@@ -283,10 +287,31 @@ class ChangesView(QWidget):
             self.files.set_rows([], [])
             return 0
         try:
-            state = load_state(self.backend)
+            state = load_state(self.backend, counts=self.runner is None)
         except GitError:
             return 0
-        return self._apply_state(state)
+        if self.runner is not None:  # last known counts until the fresh ones arrive, so chips don't flicker
+            state = replace(state, unstaged_counts=self._counts[0], staged_counts=self._counts[1])
+        count = self._apply_state(state)
+        if self.runner is not None:
+            self._load_counts(self.runner)
+        return count
+
+    def _load_counts(self, runner: TaskRunner) -> None:
+        """Fill in the +/- counts once git has worked them out, without blocking the window."""
+        generation, backend = self._generation, self.backend
+
+        def apply(counts) -> None:
+            if generation == self._generation and backend is self.backend:
+                self._counts = counts
+                self.files.set_counts(*counts)
+                if self.current:
+                    self.current = self._row(self.current.path, self.current.staged) or self.current
+                    self._set_chips(self.current)
+
+        task = Task(backend.change_counts)
+        task.signals.result.connect(apply)
+        runner.submit(task)
 
     def refresh_async(self, runner: TaskRunner, on_done: Callable[[int], None] | None = None) -> None:
         """Reload status in the background (e.g. when the window regains focus).
@@ -310,6 +335,7 @@ class ChangesView(QWidget):
         runner.submit(task)
 
     def _apply_state(self, state: WorkingState) -> int:
+        self._counts = (state.unstaged_counts, state.staged_counts)
         self.operation = state.operation
         self.merge_message = state.merge_message
         self.branch = state.branch
@@ -395,11 +421,7 @@ class ChangesView(QWidget):
         self.file_btn.setText("Unstage file" if row.staged else "Stage file")
         self.discard_btn.setVisible(not row.staged and not conflicted)
         self.discard_btn.setText("Delete file…" if untracked else "Discard file…")
-        has_counts = row.added is not None or row.removed is not None
-        self.add_chip.setVisible(has_counts and not conflicted)
-        self.del_chip.setVisible(has_counts and not conflicted)
-        self.add_chip.setText(f"+{row.added or 0}")
-        self.del_chip.setText(f"−{row.removed or 0}")
+        self._set_chips(row)
         notes = {"U": "both branches changed this file", "?": "new file, not tracked yet"}
         self.note_label.setText(row.note if row.note and row.note != "conflict" else notes.get(row.letter, ""))
 
@@ -424,7 +446,7 @@ class ChangesView(QWidget):
             return
 
         patch = parse_file_patch(text) if len(text) <= DiffView.MAX_CHARS else None
-        if patch is None or not patch.can_stage_lines:
+        if not HunkDiffView.can_show(patch):
             # Binary, mode-only or huge diffs: show as text and stage the whole file.
             self.patch = None
             self._show_text(display_text(text) if text.strip() else "No line changes (only file mode or metadata).")
@@ -435,6 +457,13 @@ class ChangesView(QWidget):
         if same_file:
             self.hunks.verticalScrollBar().setValue(scroll)
         self._update_selection_bar(0)
+
+    def _set_chips(self, row: FileRow) -> None:
+        shown = (row.added is not None or row.removed is not None) and row.letter != "U"
+        self.add_chip.setVisible(shown)
+        self.del_chip.setVisible(shown)
+        self.add_chip.setText(f"+{row.added or 0}")
+        self.del_chip.setText(f"−{row.removed or 0}")
 
     def _show_text(self, text: str) -> None:
         self.patch = None

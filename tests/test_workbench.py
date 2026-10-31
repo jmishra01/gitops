@@ -58,13 +58,16 @@ def edit_two_hunks(repo):
     repo.write("src/app.py", "\n".join(lines) + "\n")
 
 
-def test_rows_sections_counts_and_notes(window, repo):
+def test_rows_sections_counts_and_notes(window, repo, qtbot):
     edit_two_hunks(repo)
     repo.write("notes/new.txt", "a\nb\n")
     window.backend.stage("README.md")  # unchanged file: stays out of both lists
     window._refresh_status()
     rows = {(r.path, r.staged): r for r in window.changes.files.rows()}
     assert set(rows) == {("src/app.py", False), ("notes/new.txt", False)}
+    # Line counts arrive from a background task, so the rows show before git has counted.
+    qtbot.waitUntil(lambda: window.changes._row("src/app.py", False).added is not None, timeout=5000)
+    rows = {(r.path, r.staged): r for r in window.changes.files.rows()}
     app = rows[("src/app.py", False)]
     assert (app.letter, app.added, app.removed, app.folder, app.name) == ("M", 2, 2, "src/", "app.py")
     assert rows[("notes/new.txt", False)].letter == "?"
@@ -152,6 +155,20 @@ def test_untracked_and_empty_states(window, repo):
     assert changes.stack.currentWidget() is changes.text_view
     assert "+hello" in changes.current_text()
     assert changes.discard_btn.text() == "Delete file…"
+
+
+def test_diff_with_too_many_hunks_shows_as_text(window, repo):
+    # A card per hunk would freeze the window for seconds; past the cap it's plain text.
+    count = window.changes.hunks.MAX_HUNKS + 1
+    repo.write("many.txt", "".join(f"line {n}\n" for n in range(count * 10)))
+    repo.commit("many")
+    repo.write("many.txt", "".join(f"line {n}{' changed' if n % 10 == 0 else ''}\n" for n in range(count * 10)))
+    window._refresh_status()
+    changes = window.changes
+    changes.select_file("many.txt")
+    assert changes.stack.currentWidget() is changes.text_view and changes.patch is None
+    assert "+line 0 changed" in changes.current_text()
+    assert changes.file_btn.text() == "Stage file"
 
 
 @pytest.mark.parametrize(

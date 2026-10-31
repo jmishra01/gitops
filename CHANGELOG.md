@@ -2,6 +2,13 @@
 
 All notable changes to GitOps. Versions follow [semantic versioning](https://semver.org); the version lives in `gitops/__init__.py` only.
 
+## 0.3.13 - 2026-10-31
+
+### Fixed
+- **Hang while streaming git output.** History search and other streamed commands could freeze for good when git wrote more than 64 KB of warnings: git waited for its stderr to be read while GitOps waited for more stdout. stderr is now read on its own thread.
+- **Long freeze on diffs with many hunks.** Each hunk is a card of widgets, and 5,000 of them froze the window for about 12 seconds. Diffs with more than 300 hunks now show as text, in Changes and in commit details; Stage file still works for them.
+- **Stage, unstage and commit no longer wait for line counts.** After each action the file list updated only once `git diff --numstat` had counted every changed file (about 0.75 s for 5,000 files). The list now updates from `git status` straight away and the +/− counts fill in from the background, keeping the selection.
+
 ## 0.3.12 - 2026-10-30
 
 ### Changed

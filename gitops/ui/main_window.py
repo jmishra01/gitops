@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
         self.backend: GitBackend | None = None
         self.network_task: Task | None = None
 
-        self.changes = ChangesView()
+        self.changes = ChangesView(self.runner)
         self.changes.changed.connect(self.refresh)
         self.history = HistoryView(self.runner)
         self.history.reload_requested.connect(self.refresh)

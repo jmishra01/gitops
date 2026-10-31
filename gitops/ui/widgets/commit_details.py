@@ -453,7 +453,7 @@ class CommitDetails(QFrame):
             self.diff_stack.setCurrentWidget(self.text)
             return
         patch = parse_file_patch(text) if len(text) <= DiffView.MAX_CHARS else None
-        if patch is not None and patch.can_stage_lines:
+        if HunkDiffView.can_show(patch):
             self.hunks.show_patch(patch, None, selectable=False)
             self.diff_stack.setCurrentWidget(self.hunks)
         else:

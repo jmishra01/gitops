@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 
 from PySide6.QtCore import QModelIndex, QPoint, QRect, QSize, Qt, Signal
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QAbstractItemView, QListView, QStyle, QStyledItemD
 from gitops.ui.theme import colors
 
 ROW_ROLE = Qt.ItemDataRole.UserRole + 10
+Counts = dict[str, tuple[int | None, int | None]]
 
 # letter -> (chip text, chip tooltip, theme color pair)
 CHIPS = {
@@ -240,6 +241,15 @@ class ChangeFileList(QListView):
                 it.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.model_.appendRow(it)
         self.selectionModel().blockSignals(False)
+
+    def set_counts(self, unstaged: Counts, staged: Counts) -> None:
+        """Update the +/- counts in place, keeping the selection."""
+        for r in range(self.model_.rowCount()):
+            item = self.model_.item(r)
+            row = item.data(ROW_ROLE)
+            if isinstance(row, FileRow) and row.letter != "U":
+                added, removed = (staged if row.staged else unstaged).get(row.path, (None, None))
+                item.setData(replace(row, added=added, removed=removed), ROW_ROLE)
 
     def rows(self) -> list[FileRow]:
         out = []

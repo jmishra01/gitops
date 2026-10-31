@@ -211,6 +211,14 @@ class HunkDiffView(QScrollArea):
     hunk_action = Signal(int)  # hunk number: stage/unstage it
     selection_changed = Signal(int)  # number of selected lines
 
+    # Every hunk is a card of real widgets, and laying them out grows faster than their number:
+    # 1,000 hunks take ~0.5 s and 5,000 freeze the window for ~12 s. Past this, callers show text.
+    MAX_HUNKS = 300
+
+    @classmethod
+    def can_show(cls, patch: FilePatch | None) -> bool:
+        return patch is not None and patch.can_stage_lines and len(patch.hunks) <= cls.MAX_HUNKS
+
     def __init__(self, parent=None):
         super().__init__(parent, objectName="DiffScroll")
         self.setWidgetResizable(True)

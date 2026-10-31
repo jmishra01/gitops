@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -264,7 +265,13 @@ class GitBackend:
             env=_git_env(),
             **_DETACHED,
         )
-        assert proc.stdout is not None
+        assert proc.stdout is not None and proc.stderr is not None
+        # stderr is drained on its own thread: if git filled that pipe (64 KB of warnings)
+        # while we only read stdout, it would block writing and both sides would wait forever.
+        err_pipe = proc.stderr
+        stderr_chunks: list[bytes] = []
+        drain = threading.Thread(target=lambda: stderr_chunks.append(err_pipe.read()), daemon=True)
+        drain.start()
         finished = False
         try:
             for raw in proc.stdout:
@@ -274,9 +281,9 @@ class GitBackend:
             if not finished:
                 _kill(proc)
             proc.stdout.close()
-            stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
-            if proc.stderr:
-                proc.stderr.close()
+            drain.join()
+            err_pipe.close()
+            stderr = b"".join(stderr_chunks).decode("utf-8", errors="replace")
             returncode = proc.wait()
         if returncode != 0:
             raise GitError(args, returncode, stderr)
